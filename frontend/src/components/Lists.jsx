@@ -1,39 +1,135 @@
 import { useEffect, useState } from "react";
-import { apiFetch } from "../services/api";
+
+const API_URL =
+    import.meta.env.VITE_API_URL ||
+    "https://memomate-af77.onrender.com";
+
+const getToken = () =>
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("auth_token") ||
+    "";
+
+const getErrorMessage = (data, fallback) => {
+    if (!data) return fallback;
+
+    if (typeof data === "string") {
+        return data;
+    }
+
+    if (typeof data.detail === "string") {
+        return data.detail;
+    }
+
+    if (Array.isArray(data.detail)) {
+        return data.detail
+            .map((item) =>
+                typeof item === "string"
+                    ? item
+                    : item?.msg ||
+                      JSON.stringify(item)
+            )
+            .join(", ");
+    }
+
+    if (
+        data.detail &&
+        typeof data.detail === "object"
+    ) {
+        if (data.detail.message) {
+            return data.detail.message;
+        }
+
+        if (data.detail.msg) {
+            return data.detail.msg;
+        }
+
+        return JSON.stringify(data.detail);
+    }
+
+    if (data.message) {
+        return data.message;
+    }
+
+    return fallback;
+};
+
+const apiRequest = async (
+    url,
+    options = {}
+) => {
+    const token = getToken();
+
+    const response = await fetch(url, {
+        ...options,
+
+        headers: {
+            ...(token
+                ? {
+                      Authorization: `Bearer ${token}`,
+                  }
+                : {}),
+
+            ...(options.headers || {}),
+        },
+    });
+
+    let data = null;
+
+    try {
+        data = await response.json();
+    } catch {
+        data = null;
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            getErrorMessage(
+                data,
+                `Request failed with status ${response.status}.`
+            )
+        );
+    }
+
+    return data;
+};
 
 function Lists() {
     const [lists, setLists] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const [showCreate, setShowCreate] = useState(false);
-    const [newListName, setNewListName] = useState("");
+    const [showCreate, setShowCreate] =
+        useState(false);
+
+    const [newListName, setNewListName] =
+        useState("");
 
     const [newItem, setNewItem] = useState({});
-    const [addingItem, setAddingItem] = useState(null);
-
-    // --------------------------------------------------
-    // Load lists
-    // --------------------------------------------------
+    const [addingItem, setAddingItem] =
+        useState(null);
 
     const loadLists = async () => {
         try {
             setLoading(true);
             setError("");
 
-            const response = await apiFetch("/lists");
+            const data = await apiRequest(
+                `${API_URL}/lists`
+            );
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    data.detail || "Could not load lists."
-                );
-            }
-
-            setLists(Array.isArray(data) ? data : []);
+            setLists(
+                Array.isArray(data)
+                    ? data
+                    : Array.isArray(data?.lists)
+                      ? data.lists
+                      : []
+            );
         } catch (err) {
-            console.error("Lists error:", err);
+            console.error(
+                "Lists error:",
+                err
+            );
 
             setError(
                 err.message ||
@@ -48,10 +144,6 @@ function Lists() {
         loadLists();
     }, []);
 
-    // --------------------------------------------------
-    // Create list
-    // --------------------------------------------------
-
     const createList = async () => {
         const name = newListName.trim();
 
@@ -62,28 +154,31 @@ function Lists() {
         try {
             setError("");
 
-            const response = await apiFetch(
-                `/lists?name=${encodeURIComponent(name)}`,
+            await apiRequest(
+                `${API_URL}/lists`,
                 {
                     method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                    },
+
+                    body: JSON.stringify({
+                        name,
+                    }),
                 }
             );
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    result.detail ||
-                        "Could not create list."
-                );
-            }
 
             setNewListName("");
             setShowCreate(false);
 
             await loadLists();
         } catch (err) {
-            console.error("Create list error:", err);
+            console.error(
+                "Create list error:",
+                err
+            );
 
             setError(
                 err.message ||
@@ -91,10 +186,6 @@ function Lists() {
             );
         }
     };
-
-    // --------------------------------------------------
-    // Add item
-    // --------------------------------------------------
 
     const addItem = async (listId) => {
         const text = (
@@ -106,26 +197,17 @@ function Lists() {
         }
 
         try {
-            setAddingItem(listId);
             setError("");
+            setAddingItem(listId);
 
-            const response = await apiFetch(
-                `/lists/${listId}/items?text=${encodeURIComponent(
+            await apiRequest(
+                `${API_URL}/lists/${listId}/items?text=${encodeURIComponent(
                     text
                 )}`,
                 {
                     method: "POST",
                 }
             );
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    result.detail ||
-                        "Could not add item."
-                );
-            }
 
             setNewItem((previous) => ({
                 ...previous,
@@ -134,7 +216,10 @@ function Lists() {
 
             await loadLists();
         } catch (err) {
-            console.error("Add item error:", err);
+            console.error(
+                "Add item error:",
+                err
+            );
 
             setError(
                 err.message ||
@@ -145,29 +230,16 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Complete item
-    // --------------------------------------------------
-
     const completeItem = async (itemId) => {
         try {
             setError("");
 
-            const response = await apiFetch(
-                `/lists/items/${itemId}/complete`,
+            await apiRequest(
+                `${API_URL}/lists/items/${itemId}/complete`,
                 {
                     method: "PUT",
                 }
             );
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    result.detail ||
-                        "Could not complete item."
-                );
-            }
 
             await loadLists();
         } catch (err) {
@@ -183,29 +255,16 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Delete item
-    // --------------------------------------------------
-
     const deleteItem = async (itemId) => {
         try {
             setError("");
 
-            const response = await apiFetch(
-                `/lists/items/${itemId}`,
+            await apiRequest(
+                `${API_URL}/lists/items/${itemId}`,
                 {
                     method: "DELETE",
                 }
             );
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    result.detail ||
-                        "Could not delete item."
-                );
-            }
 
             await loadLists();
         } catch (err) {
@@ -221,13 +280,10 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Stats
-    // --------------------------------------------------
-
     const totalItems = lists.reduce(
         (total, list) =>
-            total + (list.items?.length || 0),
+            total +
+            (list.items?.length || 0),
         0
     );
 
@@ -240,15 +296,12 @@ function Lists() {
         0
     );
 
-    // --------------------------------------------------
-    // Loading
-    // --------------------------------------------------
-
     if (loading) {
         return (
             <div className="space-y-6">
                 <div>
                     <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
+
                     <div className="mt-3 h-4 w-80 animate-pulse rounded bg-slate-200" />
                 </div>
 
@@ -266,11 +319,7 @@ function Lists() {
 
     return (
         <div className="space-y-6">
-
-            {/* Header */}
-
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-
                 <div>
                     <p className="text-sm font-semibold text-emerald-600">
                         Stay organized
@@ -281,8 +330,9 @@ function Lists() {
                     </h1>
 
                     <p className="mt-2 max-w-2xl text-slate-500">
-                        Organize shopping, tasks, packing and anything
-                        else you want MemoMate to remember.
+                        Organize shopping, tasks,
+                        packing and anything else
+                        you want MemoMate to remember.
                     </p>
                 </div>
 
@@ -300,8 +350,6 @@ function Lists() {
                 </button>
             </div>
 
-            {/* Error */}
-
             {error && (
                 <div className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     <span>
@@ -310,7 +358,9 @@ function Lists() {
 
                     <button
                         type="button"
-                        onClick={() => setError("")}
+                        onClick={() =>
+                            setError("")
+                        }
                         className="font-bold"
                     >
                         ×
@@ -318,10 +368,7 @@ function Lists() {
                 </div>
             )}
 
-            {/* Stats */}
-
             <div className="grid gap-4 sm:grid-cols-3">
-
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Lists
@@ -353,11 +400,8 @@ function Lists() {
                 </div>
             </div>
 
-            {/* Empty state */}
-
             {lists.length === 0 && (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-3xl">
                         📝
                     </div>
@@ -367,8 +411,10 @@ function Lists() {
                     </h2>
 
                     <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                        Create your first list or simply tell MemoMate:
-                        “Add milk and bread to my shopping list.”
+                        Create your first list or
+                        simply tell MemoMate:
+                        “Add milk and bread to my
+                        shopping list.”
                     </p>
 
                     <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
@@ -385,13 +431,9 @@ function Lists() {
                 </div>
             )}
 
-            {/* Lists */}
-
             {lists.length > 0 && (
                 <div className="grid gap-5 lg:grid-cols-2">
-
                     {lists.map((list) => {
-
                         const items =
                             list.items || [];
 
@@ -406,15 +448,9 @@ function Lists() {
                                 key={list.id}
                                 className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                             >
-
-                                {/* List header */}
-
                                 <div className="border-b border-slate-100 p-5">
-
                                     <div className="flex items-start justify-between gap-4">
-
                                         <div className="flex items-center gap-3">
-
                                             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl">
                                                 📝
                                             </div>
@@ -425,27 +461,31 @@ function Lists() {
                                                 </h2>
 
                                                 <p className="mt-0.5 text-xs text-slate-400">
-                                                    {completed} of{" "}
-                                                    {items.length}{" "}
+                                                    {completed}{" "}
+                                                    of{" "}
+                                                    {
+                                                        items.length
+                                                    }{" "}
                                                     completed
                                                 </p>
                                             </div>
                                         </div>
 
                                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                                            {items.length}{" "}
-                                            {items.length === 1
+                                            {
+                                                items.length
+                                            }{" "}
+                                            {items.length ===
+                                            1
                                                 ? "item"
                                                 : "items"}
                                         </span>
                                     </div>
                                 </div>
 
-                                {/* Items */}
-
                                 <div className="p-4">
-
-                                    {items.length === 0 ? (
+                                    {items.length ===
+                                    0 ? (
                                         <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center">
                                             <p className="text-sm text-slate-400">
                                                 No items yet.
@@ -453,9 +493,10 @@ function Lists() {
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
-
                                             {items.map(
-                                                (item) => (
+                                                (
+                                                    item
+                                                ) => (
                                                     <div
                                                         key={
                                                             item.id
@@ -466,7 +507,6 @@ function Lists() {
                                                                 : "bg-slate-50 hover:bg-slate-100"
                                                         }`}
                                                     >
-
                                                         <button
                                                             type="button"
                                                             onClick={() =>
@@ -496,7 +536,9 @@ function Lists() {
                                                                     : "text-slate-700"
                                                             }`}
                                                         >
-                                                            {item.text}
+                                                            {
+                                                                item.text
+                                                            }
                                                         </span>
 
                                                         <button
@@ -517,10 +559,7 @@ function Lists() {
                                         </div>
                                     )}
 
-                                    {/* Add item */}
-
                                     <div className="mt-4 flex gap-2">
-
                                         <input
                                             value={
                                                 newItem[
@@ -584,8 +623,6 @@ function Lists() {
                 </div>
             )}
 
-            {/* Create List Modal */}
-
             {showCreate && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
@@ -599,9 +636,7 @@ function Lists() {
                     }}
                 >
                     <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-
                         <div className="flex items-start justify-between">
-
                             <div>
                                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl">
                                     📝
@@ -612,7 +647,8 @@ function Lists() {
                                 </h2>
 
                                 <p className="mt-1 text-sm text-slate-500">
-                                    Give your list a simple name.
+                                    Give your list a simple
+                                    name.
                                 </p>
                             </div>
 
@@ -628,7 +664,6 @@ function Lists() {
                         </div>
 
                         <div className="mt-6">
-
                             <label className="mb-2 block text-sm font-semibold text-slate-700">
                                 List name
                             </label>
@@ -655,7 +690,6 @@ function Lists() {
                         </div>
 
                         <div className="mt-6 flex gap-3">
-
                             <button
                                 type="button"
                                 onClick={() =>

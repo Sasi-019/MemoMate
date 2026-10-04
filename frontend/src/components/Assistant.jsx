@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { apiFetch } from "../services/api";
+
+const API_URL =
+    import.meta.env.VITE_API_URL ||
+    "https://memomate-af77.onrender.com";
+
+const getToken = () =>
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("auth_token") ||
+    "";
 
 const INITIAL_MESSAGE = {
     role: "assistant",
@@ -14,14 +23,19 @@ const QUICK_PROMPTS = [
 ];
 
 function Assistant() {
-    const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+    const [messages, setMessages] = useState([
+        INITIAL_MESSAGE,
+    ]);
+
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
-    const [voiceSupported, setVoiceSupported] = useState(false);
+    const [voiceSupported, setVoiceSupported] =
+        useState(false);
     const [voiceError, setVoiceError] = useState("");
-    const [transcribing, setTranscribing] = useState(false);
+    const [transcribing, setTranscribing] =
+        useState(false);
 
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -36,16 +50,19 @@ function Assistant() {
     }, []);
 
     const sendMessage = async (messageOverride = null) => {
-        const trimmed = (messageOverride ?? input).trim();
+        const trimmed = (
+            messageOverride ?? input
+        ).trim();
 
         if (!trimmed || loading) {
             return;
         }
 
-        const previousConversation = messages.map((message) => ({
-            role: message.role,
-            content: message.content,
-        }));
+        const previousConversation =
+            messages.map((message) => ({
+                role: message.role,
+                content: message.content,
+            }));
 
         setMessages((previous) => [
             ...previous,
@@ -60,45 +77,79 @@ function Assistant() {
         setVoiceError("");
 
         try {
-            const response = await apiFetch("/assistant/chat", {
-                method: "POST",
-                body: JSON.stringify({
-                    message: trimmed,
-                    conversation: previousConversation,
-                }),
-            });
+            const token = getToken();
 
-            const result = await response.json();
+            const response = await fetch(
+                `${API_URL}/assistant/chat`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+
+                        ...(token
+                            ? {
+                                  Authorization: `Bearer ${token}`,
+                              }
+                            : {}),
+                    },
+
+                    body: JSON.stringify({
+                        message: trimmed,
+                        conversation:
+                            previousConversation,
+                    }),
+                }
+            );
+
+            let result = null;
+
+            try {
+                result = await response.json();
+            } catch {
+                result = null;
+            }
 
             if (!response.ok) {
-                throw new Error(
-                    result.detail ||
-                        result.message ||
-                        "Assistant request failed."
-                );
+                const detail =
+                    typeof result?.detail ===
+                    "string"
+                        ? result.detail
+                        : "Assistant request failed.";
+
+                throw new Error(detail);
             }
 
             setMessages((previous) => [
                 ...previous,
                 {
                     role: "assistant",
+
                     content:
-                        result.response ||
+                        result?.response ||
                         "I understood your request.",
-                    action: result.action,
-                    data: result.data,
+
+                    action: result?.action,
+
+                    data: result?.data,
                 },
             ]);
         } catch (error) {
-            console.error("Assistant error:", error);
+            console.error(
+                "Assistant error:",
+                error
+            );
 
             setMessages((previous) => [
                 ...previous,
                 {
                     role: "assistant",
+
                     content:
-                        error?.message ||
+                        error.message ||
                         "Sorry, I couldn't connect to MemoMate AI right now.",
+
                     error: true,
                 },
             ]);
@@ -114,29 +165,39 @@ function Assistant() {
             setVoiceError(
                 "Voice recording is not supported in this browser."
             );
+
             return;
         }
 
         try {
             const stream =
-                await navigator.mediaDevices.getUserMedia({
-                    audio: true,
-                });
+                await navigator.mediaDevices.getUserMedia(
+                    {
+                        audio: true,
+                    }
+                );
 
-            const mediaRecorder = new MediaRecorder(stream);
+            const mediaRecorder =
+                new MediaRecorder(stream);
 
             audioChunksRef.current = [];
 
-            mediaRecorder.ondataavailable = (event) => {
+            mediaRecorder.ondataavailable = (
+                event
+            ) => {
                 if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
+                    audioChunksRef.current.push(
+                        event.data
+                    );
                 }
             };
 
             mediaRecorder.onstop = async () => {
                 stream
                     .getTracks()
-                    .forEach((track) => track.stop());
+                    .forEach((track) =>
+                        track.stop()
+                    );
 
                 const audioBlob = new Blob(
                     audioChunksRef.current,
@@ -150,12 +211,17 @@ function Assistant() {
                 await transcribeAudio(audioBlob);
             };
 
-            mediaRecorderRef.current = mediaRecorder;
+            mediaRecorderRef.current =
+                mediaRecorder;
+
             mediaRecorder.start();
 
             setIsRecording(true);
         } catch (error) {
-            console.error("Microphone error:", error);
+            console.error(
+                "Microphone error:",
+                error
+            );
 
             setVoiceError(
                 "Microphone access was denied or unavailable. Please allow microphone access in Chrome."
@@ -164,7 +230,8 @@ function Assistant() {
     };
 
     const stopRecording = () => {
-        const recorder = mediaRecorderRef.current;
+        const recorder =
+            mediaRecorderRef.current;
 
         if (
             !recorder ||
@@ -190,25 +257,37 @@ function Assistant() {
                 "memomate-voice.webm"
             );
 
-            const response = await apiFetch(
-                "/voice/transcribe",
+            const token = getToken();
+
+            const response = await fetch(
+                `${API_URL}/voice/transcribe`,
                 {
                     method: "POST",
+
+                    headers: token
+                        ? {
+                              Authorization: `Bearer ${token}`,
+                          }
+                        : {},
+
                     body: formData,
                 }
             );
 
-            const result = await response.json();
+            const result =
+                await response.json();
 
             if (!response.ok) {
                 throw new Error(
-                    result.detail ||
-                        result.message ||
-                        "Voice transcription failed."
+                    typeof result?.detail ===
+                        "string"
+                        ? result.detail
+                        : "Voice transcription failed."
                 );
             }
 
-            const transcript = result.text?.trim();
+            const transcript =
+                result.text?.trim();
 
             if (!transcript) {
                 throw new Error(
@@ -226,7 +305,7 @@ function Assistant() {
             );
 
             setVoiceError(
-                error?.message ||
+                error.message ||
                     "Could not transcribe your voice."
             );
         } finally {
@@ -268,7 +347,8 @@ function Assistant() {
             .toLowerCase()
             .replace(
                 /\b\w/g,
-                (letter) => letter.toUpperCase()
+                (letter) =>
+                    letter.toUpperCase()
             );
     };
 
@@ -307,66 +387,74 @@ function Assistant() {
                     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
                         <div className="mx-auto max-w-4xl space-y-5">
 
-                            {messages.map((message, index) => {
-                                const isUser =
-                                    message.role === "user";
+                            {messages.map(
+                                (message, index) => {
+                                    const isUser =
+                                        message.role ===
+                                        "user";
 
-                                const actionLabel =
-                                    getActionLabel(
-                                        message.action
-                                    );
+                                    const actionLabel =
+                                        getActionLabel(
+                                            message.action
+                                        );
 
-                                return (
-                                    <div
-                                        key={index}
-                                        className={`flex ${
-                                            isUser
-                                                ? "justify-end"
-                                                : "justify-start"
-                                        }`}
-                                    >
+                                    return (
                                         <div
-                                            className={`flex max-w-[85%] gap-3 ${
+                                            key={index}
+                                            className={`flex ${
                                                 isUser
-                                                    ? "flex-row-reverse"
-                                                    : ""
+                                                    ? "justify-end"
+                                                    : "justify-start"
                                             }`}
                                         >
                                             <div
-                                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
+                                                className={`flex max-w-[85%] gap-3 ${
                                                     isUser
-                                                        ? "bg-slate-900 text-white"
-                                                        : "bg-indigo-100 text-indigo-700"
+                                                        ? "flex-row-reverse"
+                                                        : ""
                                                 }`}
                                             >
-                                                {isUser
-                                                    ? "YOU"
-                                                    : "✦"}
-                                            </div>
-
-                                            <div>
                                                 <div
-                                                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
                                                         isUser
-                                                            ? "rounded-tr-md bg-slate-900 text-white"
-                                                            : message.error
-                                                              ? "bg-red-50 text-red-700"
-                                                              : "rounded-tl-md bg-slate-100 text-slate-800"
+                                                            ? "bg-slate-900 text-white"
+                                                            : "bg-indigo-100 text-indigo-700"
                                                     }`}
                                                 >
-                                                    {message.content}
+                                                    {isUser
+                                                        ? "YOU"
+                                                        : "✦"}
                                                 </div>
 
-                                                {actionLabel && (
-                                                    <div className="mt-2 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                                                        ✓ {actionLabel}
+                                                <div>
+                                                    <div
+                                                        className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                                                            isUser
+                                                                ? "rounded-tr-md bg-slate-900 text-white"
+                                                                : message.error
+                                                                  ? "bg-red-50 text-red-700"
+                                                                  : "rounded-tl-md bg-slate-100 text-slate-800"
+                                                        }`}
+                                                    >
+                                                        {
+                                                            message.content
+                                                        }
                                                     </div>
-                                                )}
+
+                                                    {actionLabel && (
+                                                        <div className="mt-2 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+                                                            ✓{" "}
+                                                            {
+                                                                actionLabel
+                                                            }
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                }
+                            )}
 
                             {loading && (
                                 <div className="flex items-center gap-3">
@@ -393,21 +481,25 @@ function Assistant() {
                             </p>
 
                             <div className="flex gap-2 overflow-x-auto pb-3">
-                                {QUICK_PROMPTS.map((prompt) => (
-                                    <button
-                                        key={prompt}
-                                        onClick={() =>
-                                            sendMessage(prompt)
-                                        }
-                                        disabled={
-                                            loading ||
-                                            transcribing
-                                        }
-                                        className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                                    >
-                                        {prompt}
-                                    </button>
-                                ))}
+                                {QUICK_PROMPTS.map(
+                                    (prompt) => (
+                                        <button
+                                            key={prompt}
+                                            onClick={() =>
+                                                sendMessage(
+                                                    prompt
+                                                )
+                                            }
+                                            disabled={
+                                                loading ||
+                                                transcribing
+                                            }
+                                            className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                                        >
+                                            {prompt}
+                                        </button>
+                                    )
+                                )}
                             </div>
                         </div>
                     </div>
@@ -493,10 +585,13 @@ function Assistant() {
                                     value={input}
                                     onChange={(event) =>
                                         setInput(
-                                            event.target.value
+                                            event.target
+                                                .value
                                         )
                                     }
-                                    onKeyDown={handleKeyDown}
+                                    onKeyDown={
+                                        handleKeyDown
+                                    }
                                     disabled={
                                         loading ||
                                         transcribing
@@ -523,8 +618,14 @@ function Assistant() {
                             </div>
 
                             <div className="mt-2 flex justify-between px-1 text-[11px] text-slate-400">
-                                <span>Enter to send</span>
-                                <span>🎤 Backend Whisper voice</span>
+                                <span>
+                                    Enter to send
+                                </span>
+
+                                <span>
+                                    🎤 Backend Whisper
+                                    voice
+                                </span>
                             </div>
                         </div>
                     </div>
