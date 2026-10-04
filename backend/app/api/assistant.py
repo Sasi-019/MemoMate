@@ -12,6 +12,7 @@ from app.schemas.assistant import (
 )
 from app.services.ai_service import process_message
 from app.services.action_engine import execute_action
+from app.services.list_intent import detect_list_intent
 
 
 router = APIRouter(
@@ -226,11 +227,17 @@ def assistant_chat(
             for item in request.conversation
         ]
 
-        result = process_message(
-            request.message,
-            conversation,
-            tz_offset_minutes=request.tz_offset_minutes,
-        )
+        # Clear list commands ("create a shopping list", "show my lists")
+        # are handled directly so they work even if the AI model is slow,
+        # misformats its JSON, or is unavailable.
+        result = detect_list_intent(request.message)
+
+        if result is None:
+            result = process_message(
+                request.message,
+                conversation,
+                tz_offset_minutes=request.tz_offset_minutes,
+            )
 
         result = normalize_list_action(
             request.message,

@@ -3,6 +3,7 @@ from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.database.database import Base, engine, get_db
@@ -55,6 +56,37 @@ app = FastAPI(
 # ============================================================
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_new_columns():
+    """
+    create_all() only creates MISSING TABLES; it never adds columns to an
+    existing table. If you already have a database from before
+    calendar_events.tz_offset_minutes existed, every /events query (and the
+    reminder scheduler) would fail with "no such column". Add it if needed.
+    """
+    inspector = inspect(engine)
+
+    if "calendar_events" not in inspector.get_table_names():
+        return
+
+    columns = {
+        column["name"]
+        for column in inspector.get_columns("calendar_events")
+    }
+
+    if "tz_offset_minutes" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE calendar_events "
+                    "ADD COLUMN tz_offset_minutes "
+                    "INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
+
+ensure_new_columns()
 
 
 # ============================================================

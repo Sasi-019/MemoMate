@@ -306,6 +306,9 @@ VIEW_LIST
 ----------------
 Use when the user wants to see/list the contents of a list.
 
+If the user asks for ALL their lists, or a summary/overview of their
+lists, use VIEW_LIST with an EMPTY data object: {}.
+
 Example:
 
 {
@@ -654,23 +657,31 @@ def process_message(
         f"UTC{sign}{abs_minutes // 60:02d}:{abs_minutes % 60:02d}."
     )
 
+    # ONE system message only. Many chat templates reject a second
+    # system message, which would break every assistant request.
     messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
-        },
-        {
-            "role": "system",
-            "content": clock_message,
+            "content": SYSTEM_PROMPT + "\n\n" + clock_message,
         },
     ]
 
     # Add previous conversation.
     if conversation:
+        seen_user = False
+
         for item in conversation[-8:]:
 
             role = item.get("role")
             content = item.get("content")
+
+            # The chat must start with a user turn; the UI's greeting
+            # ("Hi! I'm MemoMate...") is an assistant turn, so skip it.
+            if role == "user":
+                seen_user = True
+
+            if role == "assistant" and not seen_user:
+                continue
 
             if (
                 role in {"user", "assistant"}

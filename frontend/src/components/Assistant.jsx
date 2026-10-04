@@ -46,12 +46,14 @@ function Assistant() {
             return;
         }
 
-        const previousConversation = messages.map(
-            (message) => ({
+        // Don't feed earlier error messages back to the AI as if they
+        // were its own replies.
+        const previousConversation = messages
+            .filter((message) => !message.error)
+            .map((message) => ({
                 role: message.role,
                 content: message.content,
-            })
-        );
+            }));
 
         setMessages((previous) => [
             ...previous,
@@ -381,7 +383,7 @@ function Assistant() {
 
                                                 <div>
                                                     <div
-                                                        className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                                                        className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${
                                                             isUser
                                                                 ? "rounded-tr-md bg-slate-900 text-white"
                                                                 : message.error

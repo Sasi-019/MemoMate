@@ -505,6 +505,68 @@ def execute_action(
     # VIEW LIST
     # ---------------------------------------------------------
     if action == "VIEW_LIST":
+        wants_one_list = data.get("list_id") is not None or bool(
+            (
+                data.get("list_name")
+                or data.get("name")
+                or data.get("list")
+                or ""
+            ).strip()
+        )
+
+        # No list named -> summarise ALL of the user's lists.
+        if not wants_one_list:
+            all_lists = (
+                db.query(SmartList)
+                .filter(SmartList.user_id == user_id)
+                .order_by(SmartList.id.asc())
+                .all()
+            )
+
+            if not all_lists:
+                return {
+                    "success": True,
+                    "message": (
+                        "You don't have any lists yet. "
+                        "Say 'create a shopping list' to make one."
+                    ),
+                    "count": 0,
+                }
+
+            lines = []
+
+            for current in all_lists:
+                items = list(current.items)
+                done = sum(1 for item in items if item.completed)
+
+                line = (
+                    f"• {current.name}: "
+                    f"{done} of {len(items)} done"
+                )
+
+                if items:
+                    preview = ", ".join(
+                        item.text for item in items[:5]
+                    )
+
+                    if len(items) > 5:
+                        preview += ", ..."
+
+                    line += f" ({preview})"
+
+                lines.append(line)
+
+            noun = "list" if len(all_lists) == 1 else "lists"
+
+            return {
+                "success": True,
+                "message": (
+                    f"You have {len(all_lists)} {noun}:\n"
+                    + "\n".join(lines)
+                ),
+                "count": len(all_lists),
+            }
+
         smart_list = _find_list(db, user_id, data)
 
         if not smart_list:
