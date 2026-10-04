@@ -15,7 +15,7 @@ function Reminders() {
     const fetchReminders = async () => {
         try {
             const response = await fetch(
-                "http://localhost:8000/reminders"
+                "https://memomate-af77.onrender.com/reminders"
             );
 
             const data = await response.json();

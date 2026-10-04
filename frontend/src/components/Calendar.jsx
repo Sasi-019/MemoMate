@@ -4,7 +4,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import "./Calendar.css";
 
-const API_URL = "http://localhost:8000";
+const API_URL = "https://memomate-af77.onrender.com";
 
 const REMINDER_OPTIONS = [
     {
