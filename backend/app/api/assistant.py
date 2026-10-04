@@ -24,12 +24,13 @@ def normalize_list_action(message: str, result: dict) -> dict:
     """
     Repair common LLM outputs for Smart Lists.
 
-    The model may correctly identify CREATE_LIST / ADD_LIST_ITEM
-    but occasionally omit the structured parameter. This extracts
-    the missing value from the user's natural-language request.
+    Extracts missing list names/items from natural-language
+    requests so small LLM formatting differences do not break
+    list creation or item management.
     """
 
     text = (message or "").strip()
+    lower = text.lower()
 
     action = result.get("action", "NONE")
     data = result.get("data") or {}
@@ -37,26 +38,36 @@ def normalize_list_action(message: str, result: dict) -> dict:
     if not isinstance(data, dict):
         data = {}
 
-    lower = text.lower()
-
-    # ---------------------------------------------------------
+    # =========================================================
     # CREATE LIST
-    # ---------------------------------------------------------
+    # =========================================================
 
     if action == "CREATE_LIST":
+
         name = (
             data.get("name")
             or data.get("list_name")
             or data.get("list")
+            or data.get("title")
         )
 
         if not name:
+
             patterns = [
-                r"create\s+(?:a\s+)?list\s+(?:of|for|named|called)\s+(.+)",
-                r"make\s+(?:a\s+)?list\s+(?:of|for|named|called)\s+(.+)",
-                r"new\s+list\s+(?:of|for|named|called)\s+(.+)",
-                r"create\s+(?:a\s+)?(.+?)\s+list",
-                r"make\s+(?:a\s+)?(.+?)\s+list",
+                # create list of name veg
+                r"(?:create|make|new|crete)\s+(?:a\s+)?list\s+of\s+name\s+(.+)",
+
+                # create list name veg
+                r"(?:create|make|new|crete)\s+(?:a\s+)?list\s+name\s+(.+)",
+
+                # create a list called shopping
+                r"(?:create|make|new|crete)\s+(?:a\s+)?list\s+(?:called|named)\s+(.+)",
+
+                # create a list of shopping
+                r"(?:create|make|new|crete)\s+(?:a\s+)?list\s+(?:of|for)\s+(.+)",
+
+                # create shopping list
+                r"(?:create|make|new|crete)\s+(?:a\s+)?(.+?)\s+list$",
             ]
 
             for pattern in patterns:
@@ -67,7 +78,7 @@ def normalize_list_action(message: str, result: dict) -> dict:
                 )
 
                 if match:
-                    name = match.group(1)
+                    name = match.group(1).strip()
                     break
 
         if name:
@@ -75,36 +86,61 @@ def normalize_list_action(message: str, result: dict) -> dict:
                 " .!?'\u2018\u2019\"\u201c\u201d"
             )
 
-            data["name"] = name
+            # Remove accidental trailing words caused by
+            # natural-language phrasing.
+            name = re.sub(
+                r"\s+(?:please|now)$",
+                "",
+                name,
+                flags=re.IGNORECASE,
+            ).strip()
 
-    # ---------------------------------------------------------
+            if name:
+                data["name"] = name
+
+    # =========================================================
     # ADD LIST ITEM
-    # ---------------------------------------------------------
+    # =========================================================
 
-    if action == "ADD_LIST_ITEM":
+    elif action == "ADD_LIST_ITEM":
+
         list_name = (
             data.get("list_name")
             or data.get("list")
+            or data.get("name")
         )
 
         item_text = (
             data.get("text")
             or data.get("item")
+            or data.get("item_text")
         )
 
         if not list_name:
-            match = re.search(
-                r"(?:to|into|in)\s+(?:my\s+)?(.+?)\s+list\b",
-                text,
-                flags=re.IGNORECASE,
-            )
 
-            if match:
-                list_name = match.group(1).strip()
+            patterns = [
+                # add milk to my shopping list
+                r"(?:to|into|in)\s+(?:my\s+)?(.+?)\s+list\b",
+
+                # add milk to shopping
+                r"(?:to|into|in)\s+(?:my\s+)?(.+?)$",
+            ]
+
+            for pattern in patterns:
+                match = re.search(
+                    pattern,
+                    text,
+                    flags=re.IGNORECASE,
+                )
+
+                if match:
+                    list_name = match.group(1).strip()
+                    break
 
         if not item_text:
+
             match = re.search(
-                r"add\s+(.+?)\s+(?:to|into|in)\s+(?:my\s+)?",
+                r"(?:add|put)\s+(.+?)\s+(?:to|into|in)\s+",
                 text,
                 flags=re.IGNORECASE,
             )
@@ -122,6 +158,43 @@ def normalize_list_action(message: str, result: dict) -> dict:
         if item_text:
             data["text"] = str(
                 item_text
+            ).strip(
+                " .!?'\u2018\u2019\"\u201c\u201d"
+            )
+
+    # =========================================================
+    # DELETE LIST
+    # =========================================================
+
+    elif action == "DELETE_LIST":
+
+        name = (
+            data.get("name")
+            or data.get("list_name")
+            or data.get("list")
+        )
+
+        if not name:
+
+            patterns = [
+                r"(?:delete|remove)\s+(?:my\s+)?(.+?)\s+list\b",
+                r"(?:delete|remove)\s+(?:the\s+)?list\s+(?:called|named)\s+(.+)",
+            ]
+
+            for pattern in patterns:
+                match = re.search(
+                    pattern,
+                    text,
+                    flags=re.IGNORECASE,
+                )
+
+                if match:
+                    name = match.group(1).strip()
+                    break
+
+        if name:
+            data["name"] = str(
+                name
             ).strip(
                 " .!?'\u2018\u2019\"\u201c\u201d"
             )
@@ -220,5 +293,5 @@ def assistant_chat(
             detail=(
                 "AI assistant failed to "
                 "process the request."
-            ),
+            )
         )
