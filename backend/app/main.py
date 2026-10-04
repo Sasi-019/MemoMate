@@ -56,17 +56,36 @@ Base.metadata.create_all(bind=engine)
 # ============================================================
 # CORS
 # ============================================================
+# ============================================================
+# CORS
+# ============================================================
+import os
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL",
+    "http://localhost:5173",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        FRONTEND_URL,
         "https://memomate-frontend-vjt2.onrender.com",
-        "https://memomate-af77.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=[
+#         "https://memomate-frontend-vjt2.onrender.com",
+#         "https://memomate-af77.onrender.com",
+#     ],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 
 # ============================================================

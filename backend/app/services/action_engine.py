@@ -1,3 +1,4 @@
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -18,9 +19,6 @@ def execute_action(
 
     The AI decides WHAT should happen.
     This action engine decides HOW to safely perform it.
-
-    Every user-owned record is created and queried using user_id so that
-    one user's data cannot be accessed through another user's session.
     """
 
     data = data or {}
@@ -62,7 +60,13 @@ def execute_action(
     # CREATE LIST
     # ---------------------------------------------------------
     if action == "CREATE_LIST":
-        name = (data.get("name") or "").strip()
+        # Accept multiple common field names from the LLM.
+        name = (
+            data.get("name")
+            or data.get("list_name")
+            or data.get("title")
+            or ""
+        ).strip()
 
         if not name:
             raise ValueError("List name is required.")
@@ -82,8 +86,6 @@ def execute_action(
                 "message": f"You already have a list named '{existing.name}'.",
                 "id": existing.id,
             }
-
-        from datetime import datetime
 
         smart_list = SmartList(
             user_id=user_id,
@@ -106,8 +108,19 @@ def execute_action(
     # ---------------------------------------------------------
     if action == "ADD_LIST_ITEM":
         list_id = data.get("list_id")
-        list_name = (data.get("list_name") or "").strip()
-        text = (data.get("text") or data.get("item") or "").strip()
+
+        list_name = (
+            data.get("list_name")
+            or data.get("name")
+            or ""
+        ).strip()
+
+        text = (
+            data.get("text")
+            or data.get("item")
+            or data.get("item_text")
+            or ""
+        ).strip()
 
         if not text:
             raise ValueError("List item text is required.")
@@ -223,6 +236,7 @@ def execute_action(
             )
 
         item_text = item.text
+
         db.delete(item)
         db.commit()
 
@@ -237,7 +251,12 @@ def execute_action(
     # ---------------------------------------------------------
     if action == "DELETE_LIST":
         list_id = data.get("list_id")
-        list_name = (data.get("name") or data.get("list_name") or "").strip()
+
+        list_name = (
+            data.get("name")
+            or data.get("list_name")
+            or ""
+        ).strip()
 
         smart_list = None
 
@@ -250,6 +269,7 @@ def execute_action(
                 )
                 .first()
             )
+
         elif list_name:
             smart_list = (
                 db.query(SmartList)
@@ -266,7 +286,7 @@ def execute_action(
                 detail="List not found.",
             )
 
-        list_name = smart_list.name
+        deleted_name = smart_list.name
 
         db.query(SmartListItem).filter(
             SmartListItem.list_id == smart_list.id
@@ -277,8 +297,8 @@ def execute_action(
 
         return {
             "success": True,
-            "message": f"List '{list_name}' deleted successfully.",
-            "id": list_id,
+            "message": f"List '{deleted_name}' deleted successfully.",
+            "id": smart_list.id,
         }
 
     # ---------------------------------------------------------

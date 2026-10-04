@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-const API_URL = "https://memomate-af77.onrender.com";
+import { apiFetch } from "../services/api";
 
 function getErrorMessage(result, fallback) {
     if (!result) return fallback;
@@ -41,16 +40,12 @@ function Lists() {
     const [newItem, setNewItem] = useState({});
     const [addingItem, setAddingItem] = useState(null);
 
-    // --------------------------------------------------
-    // Load lists
-    // --------------------------------------------------
-
     const loadLists = async () => {
         try {
             setLoading(true);
             setError("");
 
-            const response = await fetch(`${API_URL}/lists`);
+            const response = await apiFetch("/lists");
 
             const data = await response.json().catch(() => null);
 
@@ -80,10 +75,6 @@ function Lists() {
         loadLists();
     }, []);
 
-    // --------------------------------------------------
-    // Create list
-    // --------------------------------------------------
-
     const createList = async () => {
         const name = newListName.trim();
 
@@ -95,19 +86,15 @@ function Lists() {
         try {
             setError("");
 
-            const response = await fetch(
-                `${API_URL}/lists?name=${encodeURIComponent(name)}`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        name,
-                    }),
-                }
-            );
+            const response = await apiFetch("/lists", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name,
+                }),
+            });
 
             const result =
                 await response.json().catch(() => null);
@@ -135,10 +122,6 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Add item
-    // --------------------------------------------------
-
     const addItem = async (listId) => {
         const text = (
             newItem[listId] || ""
@@ -153,21 +136,12 @@ function Lists() {
             setAddingItem(listId);
             setError("");
 
-            /*
-             * Send the item in BOTH places:
-             * - query parameter for the existing API
-             * - JSON body for FastAPI/Pydantic versions
-             *   that expect a request body.
-             */
-            const response = await fetch(
-                `${API_URL}/lists/${listId}/items?text=${encodeURIComponent(
-                    text
-                )}`,
+            const response = await apiFetch(
+                `/lists/${listId}/items`,
                 {
                     method: "POST",
                     headers: {
-                        "Content-Type":
-                            "application/json",
+                        "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
                         text,
@@ -205,16 +179,12 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Complete item
-    // --------------------------------------------------
-
     const completeItem = async (itemId) => {
         try {
             setError("");
 
-            const response = await fetch(
-                `${API_URL}/lists/items/${itemId}/complete`,
+            const response = await apiFetch(
+                `/lists/items/${itemId}/complete`,
                 {
                     method: "PUT",
                 }
@@ -246,16 +216,12 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Delete item
-    // --------------------------------------------------
-
     const deleteItem = async (itemId) => {
         try {
             setError("");
 
-            const response = await fetch(
-                `${API_URL}/lists/items/${itemId}`,
+            const response = await apiFetch(
+                `/lists/items/${itemId}`,
                 {
                     method: "DELETE",
                 }
@@ -287,10 +253,6 @@ function Lists() {
         }
     };
 
-    // --------------------------------------------------
-    // Stats
-    // --------------------------------------------------
-
     const totalItems = lists.reduce(
         (total, list) =>
             total + (list.items?.length || 0),
@@ -305,10 +267,6 @@ function Lists() {
             ).length,
         0
     );
-
-    // --------------------------------------------------
-    // Loading
-    // --------------------------------------------------
 
     if (loading) {
         return (
@@ -332,11 +290,7 @@ function Lists() {
 
     return (
         <div className="space-y-6">
-
-            {/* Header */}
-
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-
                 <div>
                     <p className="text-sm font-semibold text-emerald-600">
                         Stay organized
@@ -354,25 +308,17 @@ function Lists() {
 
                 <button
                     type="button"
-                    onClick={() =>
-                        setShowCreate(true)
-                    }
+                    onClick={() => setShowCreate(true)}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800"
                 >
-                    <span className="text-lg">
-                        +
-                    </span>
+                    <span className="text-lg">+</span>
                     New list
                 </button>
             </div>
 
-            {/* Error */}
-
             {error && (
                 <div className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    <span>
-                        ⚠️ {error}
-                    </span>
+                    <span>⚠️ {error}</span>
 
                     <button
                         type="button"
@@ -384,10 +330,7 @@ function Lists() {
                 </div>
             )}
 
-            {/* Stats */}
-
             <div className="grid gap-4 sm:grid-cols-3">
-
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Lists
@@ -419,11 +362,8 @@ function Lists() {
                 </div>
             </div>
 
-            {/* Empty state */}
-
             {lists.length === 0 && (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-3xl">
                         📝
                     </div>
@@ -440,9 +380,7 @@ function Lists() {
                     <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                         <button
                             type="button"
-                            onClick={() =>
-                                setShowCreate(true)
-                            }
+                            onClick={() => setShowCreate(true)}
                             className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
                         >
                             Create a list
@@ -451,36 +389,23 @@ function Lists() {
                 </div>
             )}
 
-            {/* Lists */}
-
             {lists.length > 0 && (
                 <div className="grid gap-5 lg:grid-cols-2">
-
                     {lists.map((list) => {
+                        const items = list.items || [];
 
-                        const items =
-                            list.items || [];
-
-                        const completed =
-                            items.filter(
-                                (item) =>
-                                    item.completed
-                            ).length;
+                        const completed = items.filter(
+                            (item) => item.completed
+                        ).length;
 
                         return (
                             <div
                                 key={list.id}
                                 className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                             >
-
-                                {/* List header */}
-
                                 <div className="border-b border-slate-100 p-5">
-
                                     <div className="flex items-start justify-between gap-4">
-
                                         <div className="flex items-center gap-3">
-
                                             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl">
                                                 📝
                                             </div>
@@ -507,10 +432,7 @@ function Lists() {
                                     </div>
                                 </div>
 
-                                {/* Items */}
-
                                 <div className="p-4">
-
                                     {items.length === 0 ? (
                                         <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center">
                                             <p className="text-sm text-slate-400">
@@ -519,106 +441,85 @@ function Lists() {
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
-
-                                            {items.map(
-                                                (item) => (
-                                                    <div
-                                                        key={
-                                                            item.id
+                                            {items.map((item) => (
+                                                <div
+                                                    key={item.id}
+                                                    className={`group flex items-center gap-3 rounded-xl px-3 py-3 transition ${
+                                                        item.completed
+                                                            ? "bg-emerald-50"
+                                                            : "bg-slate-50 hover:bg-slate-100"
+                                                    }`}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            !item.completed &&
+                                                            completeItem(
+                                                                item.id
+                                                            )
                                                         }
-                                                        className={`group flex items-center gap-3 rounded-xl px-3 py-3 transition ${
+                                                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
                                                             item.completed
-                                                                ? "bg-emerald-50"
-                                                                : "bg-slate-50 hover:bg-slate-100"
+                                                                ? "border-emerald-500 bg-emerald-500 text-white"
+                                                                : "border-slate-300 bg-white text-transparent hover:border-emerald-400"
+                                                        }`}
+                                                        aria-label={
+                                                            item.completed
+                                                                ? "Completed"
+                                                                : "Mark complete"
+                                                        }
+                                                    >
+                                                        ✓
+                                                    </button>
+
+                                                    <span
+                                                        className={`min-w-0 flex-1 text-sm ${
+                                                            item.completed
+                                                                ? "text-slate-400 line-through"
+                                                                : "text-slate-700"
                                                         }`}
                                                     >
+                                                        {item.text}
+                                                    </span>
 
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                !item.completed &&
-                                                                completeItem(
-                                                                    item.id
-                                                                )
-                                                            }
-                                                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
-                                                                item.completed
-                                                                    ? "border-emerald-500 bg-emerald-500 text-white"
-                                                                    : "border-slate-300 bg-white text-transparent hover:border-emerald-400"
-                                                            }`}
-                                                            aria-label={
-                                                                item.completed
-                                                                    ? "Completed"
-                                                                    : "Mark complete"
-                                                            }
-                                                        >
-                                                            ✓
-                                                        </button>
-
-                                                        <span
-                                                            className={`min-w-0 flex-1 text-sm ${
-                                                                item.completed
-                                                                    ? "text-slate-400 line-through"
-                                                                    : "text-slate-700"
-                                                            }`}
-                                                        >
-                                                            {item.text}
-                                                        </span>
-
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                deleteItem(
-                                                                    item.id
-                                                                )
-                                                            }
-                                                            className="rounded-lg px-2 py-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                                                            aria-label="Delete item"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </div>
-                                                )
-                                            )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            deleteItem(
+                                                                item.id
+                                                            )
+                                                        }
+                                                        className="rounded-lg px-2 py-1 text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                                                        aria-label="Delete item"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
 
-                                    {/* Add item */}
-
                                     <div className="mt-4 flex gap-2">
-
                                         <input
                                             value={
-                                                newItem[
-                                                    list.id
-                                                ] || ""
+                                                newItem[list.id] || ""
                                             }
-                                            onChange={(
-                                                event
-                                            ) =>
+                                            onChange={(event) =>
                                                 setNewItem(
-                                                    (
-                                                        previous
-                                                    ) => ({
+                                                    (previous) => ({
                                                         ...previous,
                                                         [list.id]:
-                                                            event
-                                                                .target
+                                                            event.target
                                                                 .value,
                                                     })
                                                 )
                                             }
-                                            onKeyDown={(
-                                                event
-                                            ) => {
+                                            onKeyDown={(event) => {
                                                 if (
-                                                    event.key ===
-                                                    "Enter"
+                                                    event.key === "Enter"
                                                 ) {
                                                     event.preventDefault();
-                                                    addItem(
-                                                        list.id
-                                                    );
+                                                    addItem(list.id);
                                                 }
                                             }}
                                             placeholder="Add an item..."
@@ -628,18 +529,14 @@ function Lists() {
                                         <button
                                             type="button"
                                             onClick={() =>
-                                                addItem(
-                                                    list.id
-                                                )
+                                                addItem(list.id)
                                             }
                                             disabled={
-                                                addingItem ===
-                                                list.id
+                                                addingItem === list.id
                                             }
                                             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                                         >
-                                            {addingItem ===
-                                            list.id
+                                            {addingItem === list.id
                                                 ? "..."
                                                 : "Add"}
                                         </button>
@@ -651,24 +548,19 @@ function Lists() {
                 </div>
             )}
 
-            {/* Create List Modal */}
-
             {showCreate && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
                     onMouseDown={(event) => {
                         if (
-                            event.target ===
-                            event.currentTarget
+                            event.target === event.currentTarget
                         ) {
                             setShowCreate(false);
                         }
                     }}
                 >
                     <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-
                         <div className="flex items-start justify-between">
-
                             <div>
                                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl">
                                     📝
@@ -685,9 +577,7 @@ function Lists() {
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setShowCreate(false)
-                                }
+                                onClick={() => setShowCreate(false)}
                                 className="flex h-9 w-9 items-center justify-center rounded-lg text-xl text-slate-400 hover:bg-slate-100"
                             >
                                 ×
@@ -695,7 +585,6 @@ function Lists() {
                         </div>
 
                         <div className="mt-6">
-
                             <label className="mb-2 block text-sm font-semibold text-slate-700">
                                 List name
                             </label>
@@ -709,10 +598,7 @@ function Lists() {
                                     )
                                 }
                                 onKeyDown={(event) => {
-                                    if (
-                                        event.key ===
-                                        "Enter"
-                                    ) {
+                                    if (event.key === "Enter") {
                                         event.preventDefault();
                                         createList();
                                     }
@@ -723,12 +609,9 @@ function Lists() {
                         </div>
 
                         <div className="mt-6 flex gap-3">
-
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setShowCreate(false)
-                                }
+                                onClick={() => setShowCreate(false)}
                                 className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                             >
                                 Cancel
@@ -737,9 +620,7 @@ function Lists() {
                             <button
                                 type="button"
                                 onClick={createList}
-                                disabled={
-                                    !newListName.trim()
-                                }
+                                disabled={!newListName.trim()}
                                 className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Create list
