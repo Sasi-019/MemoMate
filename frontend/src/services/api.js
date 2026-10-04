@@ -1,6 +1,9 @@
-
-const API_URL =
-    import.meta.env.VITE_API_URL || "https://memomate-af77.onrender.com";
+// Backend base URL. Vite bakes VITE_API_URL in at BUILD time, so it must be
+// set in your host's environment variables before the frontend is built.
+const API_URL = (
+    import.meta.env.VITE_API_URL ||
+    "https://memomate-af77.onrender.com"
+).replace(/\/+$/, "");
 
 export { API_URL };
 
@@ -69,11 +72,50 @@ export function setStoredUser(user) {
 
 
 // ======================================================
-// API FUNCTION
-// Returns parsed JSON
+// TIME HELPERS
+// The backend stores UTC. These keep the browser's local
+// time and the server's UTC time in sync.
 // ======================================================
 
-export async function api(path, options = {}) {
+// Minutes the user's timezone is AHEAD of UTC (India = 330).
+export function getTimezoneOffsetMinutes() {
+    return -new Date().getTimezoneOffset();
+}
+
+// "2026-10-04T18:00" (local, from an input) -> "2026-10-04T12:30:00.000Z"
+export function localToUtcIso(localValue) {
+    if (!localValue) {
+        return null;
+    }
+
+    const date = new Date(localValue);
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toISOString();
+}
+
+// Today's date in the user's LOCAL timezone as "YYYY-MM-DD".
+// (toISOString() would give the UTC date, which is "yesterday"
+// for India before 5:30 AM.)
+export function todayLocalDate() {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+
+// ======================================================
+// Shared header builder
+// ======================================================
+
+function buildHeaders(options) {
     const headers = new Headers(
         options.headers || {}
     );
@@ -87,8 +129,16 @@ export async function api(path, options = {}) {
         );
     }
 
+    // Only default to JSON for plain bodies. For FormData the browser
+    // must set "multipart/form-data; boundary=..." itself, otherwise the
+    // upload (e.g. voice recording) is rejected by the server.
+    const isFormData =
+        typeof FormData !== "undefined" &&
+        options.body instanceof FormData;
+
     if (
         options.body &&
+        !isFormData &&
         !headers.has("Content-Type")
     ) {
         headers.set(
@@ -96,6 +146,18 @@ export async function api(path, options = {}) {
             "application/json"
         );
     }
+
+    return headers;
+}
+
+
+// ======================================================
+// API FUNCTION
+// Returns parsed JSON (throws on errors)
+// ======================================================
+
+export async function api(path, options = {}) {
+    const headers = buildHeaders(options);
 
     const response = await fetch(
         `${API_URL}${path}`,
@@ -109,13 +171,13 @@ export async function api(path, options = {}) {
         .json()
         .catch(() => ({}));
 
-    if (response.status === 401) {
+    if (response.status === 401 && getToken()) {
         clearToken();
     }
 
     if (!response.ok) {
         throw new Error(
-            data.detail ||
+            (typeof data.detail === "string" && data.detail) ||
             data.message ||
             "Request failed."
         );
@@ -128,43 +190,27 @@ export async function api(path, options = {}) {
 // ======================================================
 // apiFetch
 // Returns the RAW Response object
-// Used by App.jsx
 // ======================================================
 
 export async function apiFetch(
     path,
     options = {}
 ) {
-    const headers = new Headers(
-        options.headers || {}
-    );
+    const headers = buildHeaders(options);
 
-    const t = getToken();
-
-    if (t) {
-        headers.set(
-            "Authorization",
-            `Bearer ${t}`
-        );
-    }
-
-    if (
-        options.body &&
-        !headers.has("Content-Type")
-    ) {
-        headers.set(
-            "Content-Type",
-            "application/json"
-        );
-    }
-
-    return fetch(
+    const response = await fetch(
         `${API_URL}${path}`,
         {
             ...options,
             headers,
         }
     );
+
+    // An expired / invalid session sends the user back to login.
+    // (Network errors and 5xx are NOT treated as logged out.)
+    if (response.status === 401 && getToken()) {
+        clearToken();
+    }
+
+    return response;
 }
-
-

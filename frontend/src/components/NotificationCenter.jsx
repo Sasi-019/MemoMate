@@ -99,7 +99,7 @@ export default function NotificationCenter() {
 
         const interval = setInterval(
             loadNotifications,
-            5000
+            15000
         );
 
         return () => clearInterval(interval);

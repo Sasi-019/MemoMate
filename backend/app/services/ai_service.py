@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
@@ -18,20 +19,33 @@ HF_MODEL = os.getenv(
     "Qwen/Qwen3-4B-Instruct-2507",
 )
 
-if not HF_TOKEN:
-    raise RuntimeError(
-        "HF_TOKEN is missing. Add HF_TOKEN to backend/.env"
-    )
-
-
 # ---------------------------------------------------------
-# Hugging Face client
+# Hugging Face client (created lazily)
+#
+# The client used to be created at import time and raised if
+# HF_TOKEN was missing, which crashed the WHOLE API (login,
+# reminders, lists...) on startup. Now only the assistant fails.
 # ---------------------------------------------------------
 
-client = InferenceClient(
-    provider="auto",
-    api_key=HF_TOKEN,
-)
+_client = None
+
+
+def get_client():
+    global _client
+
+    if not HF_TOKEN:
+        raise RuntimeError(
+            "AI assistant is not configured: HF_TOKEN is missing "
+            "on the server."
+        )
+
+    if _client is None:
+        _client = InferenceClient(
+            provider="auto",
+            api_key=HF_TOKEN,
+        )
+
+    return _client
 
 
 # ---------------------------------------------------------
@@ -181,32 +195,38 @@ Example:
 
 COMPLETE_LIST_ITEM
 ----------------
-Use data.item_id when the user provides an identifiable item ID.
+You do NOT know item IDs. Identify the item by its text.
 
-Otherwise use the available item information.
+Use data.item_text (the item) and data.list_name (if the user
+mentioned a list).
 
 Example:
 
+User: "mark milk as done in my shopping list"
+
 {
   "action": "COMPLETE_LIST_ITEM",
-  "response": "I can mark the item as completed.",
+  "response": "I can mark milk as completed.",
   "data": {
-    "item_id": 12
+    "item_text": "milk",
+    "list_name": "Shopping"
   }
 }
 
 
 REMOVE_LIST_ITEM
 ----------------
-Use data.item_id when available.
+Same as COMPLETE_LIST_ITEM: use data.item_text and, when known,
+data.list_name. Never invent item IDs.
 
 Example:
 
 {
   "action": "REMOVE_LIST_ITEM",
-  "response": "I can remove that item from your list.",
+  "response": "I can remove milk from your Shopping list.",
   "data": {
-    "item_id": 12
+    "item_text": "milk",
+    "list_name": "Shopping"
   }
 }
 
@@ -215,9 +235,17 @@ CREATE_REMINDER
 ----------------
 Required:
 - data.title
-- data.remind_at OR date/time information
+- data.remind_at
 
-Example:
+data.remind_at MUST be the user's LOCAL date and time written as
+"YYYY-MM-DDTHH:MM:SS". Work it out yourself from the "Current local
+date and time" message that is given to you. Resolve words such as
+"tomorrow", "next Monday", "in 2 hours" into a real date.
+
+Optional: data.description, data.recurrence_type
+("none", "daily", "weekly", "monthly", "yearly").
+
+Example (if the current local date is 2026-10-04):
 
 User: "remind me to call mom tomorrow at 6 PM"
 
@@ -228,8 +256,7 @@ Return:
   "response": "I can set a reminder to call mom tomorrow at 6 PM.",
   "data": {
     "title": "Call mom",
-    "date": "tomorrow",
-    "time": "18:00"
+    "remind_at": "2026-10-05T18:00:00"
   }
 }
 
@@ -257,7 +284,10 @@ GET_NEXT_EVENT
 Use when the user asks about upcoming events, tasks, schedule,
 or what they have tomorrow.
 
-Example:
+data.date MUST be the local date "YYYY-MM-DD" being asked about.
+Leave data.date out to get the next upcoming items.
+
+Example (if the current local date is 2026-10-04):
 
 User: "What do I have tomorrow?"
 
@@ -267,7 +297,7 @@ Return:
   "action": "GET_NEXT_EVENT",
   "response": "I can check your upcoming schedule.",
   "data": {
-    "date": "tomorrow"
+    "date": "2026-10-05"
   }
 }
 
@@ -306,7 +336,24 @@ CREATE_EVENT
 ----------------
 Use when the user explicitly wants to create a calendar event.
 
-Keep the event information in data.
+Required:
+- data.title
+- data.start_time (user's LOCAL time, "YYYY-MM-DDTHH:MM:SS")
+
+Optional: data.end_time (same format), data.description.
+
+Example (if the current local date is 2026-10-04):
+
+User: "add dentist appointment on Friday at 4 pm"
+
+{
+  "action": "CREATE_EVENT",
+  "response": "I can add a dentist appointment on Friday at 4 PM.",
+  "data": {
+    "title": "Dentist appointment",
+    "start_time": "2026-10-09T16:00:00"
+  }
+}
 
 
 =========================================================
@@ -546,6 +593,29 @@ def normalize_result(parsed):
             "list_name": str(list_name).strip(),
         }
 
+    elif action in {
+        "COMPLETE_LIST_ITEM",
+        "REMOVE_LIST_ITEM",
+    }:
+        item_text = (
+            data.get("item_text")
+            or data.get("text")
+            or data.get("item")
+            or ""
+        )
+
+        list_name = (
+            data.get("list_name")
+            or data.get("list")
+            or ""
+        )
+
+        data = {
+            **data,
+            "item_text": str(item_text).strip(),
+            "list_name": str(list_name).strip(),
+        }
+
     return {
         "action": action,
         "response": response.strip(),
@@ -560,6 +630,7 @@ def normalize_result(parsed):
 def process_message(
     message: str,
     conversation=None,
+    tz_offset_minutes: int = 0,
 ):
 
     if not message or not message.strip():
@@ -567,11 +638,31 @@ def process_message(
             "Message cannot be empty."
         )
 
+    # The model has no clock. Tell it the user's local date/time so it
+    # can turn "tomorrow at 6 PM" into a real timestamp.
+    local_now = datetime.utcnow() + timedelta(
+        minutes=tz_offset_minutes
+    )
+
+    sign = "+" if tz_offset_minutes >= 0 else "-"
+    abs_minutes = abs(tz_offset_minutes)
+
+    clock_message = (
+        "Current local date and time: "
+        f"{local_now.strftime('%Y-%m-%d %H:%M')} "
+        f"({local_now.strftime('%A')}), "
+        f"UTC{sign}{abs_minutes // 60:02d}:{abs_minutes % 60:02d}."
+    )
+
     messages = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
-        }
+        },
+        {
+            "role": "system",
+            "content": clock_message,
+        },
     ]
 
     # Add previous conversation.
@@ -604,7 +695,7 @@ def process_message(
     # Call Hugging Face
     # -----------------------------------------------------
 
-    completion = client.chat.completions.create(
+    completion = get_client().chat.completions.create(
         model=HF_MODEL,
         messages=messages,
         max_tokens=500,

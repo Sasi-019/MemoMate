@@ -1,5 +1,6 @@
-from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from app.schemas.utc import UTCDateTime
 
 
 class CalendarEventCreate(BaseModel):
@@ -8,9 +9,9 @@ class CalendarEventCreate(BaseModel):
 
     description: str | None = None
 
-    start_time: datetime
+    start_time: UTCDateTime
 
-    end_time: datetime | None = None
+    end_time: UTCDateTime | None = None
 
     # -------------------------------------------------
     # Reminder
@@ -24,13 +25,18 @@ class CalendarEventCreate(BaseModel):
 
     reminder_unit: str | None = None
 
-    reminder_datetime: datetime | None = None
+    reminder_datetime: UTCDateTime | None = None
 
+    # Local wall-clock time such as "18:00". It is interpreted using
+    # tz_offset_minutes below (needed for daily/weekly/monthly/yearly).
     reminder_time: str | None = None
 
     reminder_day: str | None = None
 
     reminder_month: int | None = None
+
+    # Minutes the user's timezone is AHEAD of UTC (India = 330).
+    tz_offset_minutes: int = 0
 
     # -------------------------------------------------
     # Event recurrence
@@ -45,5 +51,4 @@ class CalendarEventResponse(CalendarEventCreate):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -105,6 +105,14 @@ class CalendarEvent(Base):
         nullable=True
     )
 
+    # Minutes the user's timezone is ahead of UTC (India = 330).
+    # Used to interpret reminder_time ("18:00") for recurring reminders.
+    tz_offset_minutes = Column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+
     # -------------------------------------------------
     # Event recurrence
     # -------------------------------------------------

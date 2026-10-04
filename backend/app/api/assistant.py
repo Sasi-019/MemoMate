@@ -229,6 +229,7 @@ def assistant_chat(
         result = process_message(
             request.message,
             conversation,
+            tz_offset_minutes=request.tz_offset_minutes,
         )
 
         result = normalize_list_action(
@@ -252,6 +253,7 @@ def assistant_chat(
                 data=data,
                 db=db,
                 user_id=current_user.id,
+                tz_offset_minutes=request.tz_offset_minutes,
             )
 
             result["response"] = execution.get(
@@ -277,6 +279,15 @@ def assistant_chat(
 
     except HTTPException:
         raise
+
+    except RuntimeError as exc:
+        # e.g. HF_TOKEN missing, or the model returned nothing.
+        print("[MemoMate AI Error]", str(exc))
+
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        )
 
     except Exception as exc:
         print(

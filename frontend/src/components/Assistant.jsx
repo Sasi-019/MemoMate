@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { apiFetch } from "../services/api";
+import {
+    apiFetch,
+    getTimezoneOffsetMinutes,
+} from "../services/api";
 
 const INITIAL_MESSAGE = {
     role: "assistant",
@@ -71,6 +74,8 @@ function Assistant() {
                         message: trimmed,
                         conversation:
                             previousConversation,
+                        tz_offset_minutes:
+                            getTimezoneOffsetMinutes(),
                     }),
                 }
             );

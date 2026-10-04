@@ -1,6 +1,6 @@
+import calendar
 import threading
-import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from app.database.database import SessionLocal
 from app.models.reminder import Reminder
@@ -11,13 +11,31 @@ from app.models.calendar_event import CalendarEvent
 _scheduler_thread = None
 _stop_event = threading.Event()
 
+# Notifications older than this are skipped instead of being "caught up"
+# (prevents a flood of old alerts after the server has been asleep).
+CATCH_UP_WINDOW = timedelta(days=1)
+
+WEEKDAYS = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
+
 
 def _make_occurrence_key(
     reminder_id=None,
     event_id=None,
     scheduled_for=None,
 ):
-    source = f"reminder:{reminder_id}" if reminder_id else f"event:{event_id}"
+    source = (
+        f"reminder:{reminder_id}"
+        if reminder_id
+        else f"event:{event_id}"
+    )
     timestamp = (
         scheduled_for.isoformat()
         if scheduled_for
@@ -63,14 +81,56 @@ def _create_notification(
     )
 
     db.add(notification)
+    # Flush so a second occurrence in the same loop sees it.
+    db.flush()
     return True
+
+
+# ---------------------------------------------------------
+# Plain reminders (Reminders page + AI assistant)
+# ---------------------------------------------------------
+
+def _next_occurrence(current, recurrence_type):
+    """Return the next remind_at after `current`, or None if one-time/unknown."""
+
+    if recurrence_type == "daily":
+        return current + timedelta(days=1)
+
+    if recurrence_type == "weekly":
+        return current + timedelta(weeks=1)
+
+    if recurrence_type == "monthly":
+        month = current.month + 1
+        year = current.year
+
+        if month > 12:
+            month = 1
+            year += 1
+
+        day = min(
+            current.day,
+            calendar.monthrange(year, month)[1],
+        )
+
+        return current.replace(year=year, month=month, day=day)
+
+    if recurrence_type == "yearly":
+        year = current.year + 1
+        day = min(
+            current.day,
+            calendar.monthrange(year, current.month)[1],
+        )
+
+        return current.replace(year=year, day=day)
+
+    return None
 
 
 def _process_reminders(db, now):
     reminders = (
         db.query(Reminder)
         .filter(
-            Reminder.is_active == True,
+            Reminder.is_active == True,  # noqa: E712
             Reminder.remind_at <= now,
         )
         .all()
@@ -79,73 +139,172 @@ def _process_reminders(db, now):
     changed = False
 
     for reminder in reminders:
-        created = _create_notification(
-            db=db,
-            user_id=reminder.user_id,
-            title=reminder.title,
-            message=reminder.description or "You have a reminder.",
-            scheduled_for=reminder.remind_at,
-            reminder_id=reminder.id,
-        )
+        due = reminder.remind_at
 
-        if created:
-            changed = True
+        # Only notify if this occurrence is recent enough.
+        if now - due <= CATCH_UP_WINDOW:
+            if _create_notification(
+                db=db,
+                user_id=reminder.user_id,
+                title=reminder.title,
+                message=reminder.description or "You have a reminder.",
+                scheduled_for=due,
+                reminder_id=reminder.id,
+            ):
+                changed = True
 
         if reminder.recurrence_type == "none":
             reminder.is_active = False
             changed = True
+            continue
 
-        elif reminder.recurrence_type == "daily":
-            reminder.remind_at = reminder.remind_at + timedelta(days=1)
-            changed = True
+        following = _next_occurrence(due, reminder.recurrence_type)
 
-        elif reminder.recurrence_type == "weekly":
-            reminder.remind_at = reminder.remind_at + timedelta(weeks=1)
-            changed = True
-
-        elif reminder.recurrence_type == "monthly":
-            # Keep the same day when possible. For dates such as the
-            # 31st, move forward safely to the next valid month date.
-            next_month = reminder.remind_at.month + 1
-            year = reminder.remind_at.year
-
-            if next_month > 12:
-                next_month = 1
-                year += 1
-
-            import calendar
-
-            day = min(
-                reminder.remind_at.day,
-                calendar.monthrange(year, next_month)[1],
-            )
-
-            reminder.remind_at = reminder.remind_at.replace(
-                year=year,
-                month=next_month,
-                day=day,
-            )
-            changed = True
-
-        elif reminder.recurrence_type == "yearly":
-            try:
-                reminder.remind_at = reminder.remind_at.replace(
-                    year=reminder.remind_at.year + 1
-                )
-            except ValueError:
-                # February 29 -> February 28 in a non-leap year.
-                reminder.remind_at = reminder.remind_at.replace(
-                    year=reminder.remind_at.year + 1,
-                    day=28,
-                )
-            changed = True
-
-        else:
-            # Unknown recurrence: prevent an endless notification loop.
+        if following is None:
+            # Unknown recurrence: stop it so it can't loop forever.
             reminder.is_active = False
             changed = True
+            continue
+
+        # Skip every occurrence that is already in the past so a
+        # long-sleeping server doesn't send a burst of notifications.
+        guard = 0
+
+        while following <= now and guard < 1000:
+            following = _next_occurrence(
+                following,
+                reminder.recurrence_type,
+            )
+            guard += 1
+
+        reminder.remind_at = following
+        changed = True
 
     return changed
+
+
+# ---------------------------------------------------------
+# Calendar event reminders
+# ---------------------------------------------------------
+
+def _to_minutes(value, unit):
+    minutes = value
+
+    if unit == "hours":
+        minutes *= 60
+    elif unit == "days":
+        minutes *= 60 * 24
+
+    return minutes
+
+
+def _parse_hhmm(value):
+    try:
+        hours, minutes = str(value).split(":")[:2]
+        return time(int(hours), int(minutes))
+    except (ValueError, TypeError):
+        return None
+
+
+def _latest_recurring_occurrence(event, now):
+    """
+    Latest scheduled reminder time (naive UTC) that is <= now for
+    daily / weekly / monthly / yearly event reminders, or None.
+
+    reminder_time is the user's local wall-clock time, so it is
+    shifted using the event's tz_offset_minutes.
+    """
+
+    at = _parse_hhmm(event.reminder_time)
+
+    if at is None:
+        return None
+
+    offset = timedelta(minutes=event.tz_offset_minutes or 0)
+    local_now = now + offset
+    rtype = event.reminder_type
+
+    candidate = None
+
+    if rtype == "daily":
+        candidate = datetime.combine(local_now.date(), at)
+
+        if candidate > local_now:
+            candidate -= timedelta(days=1)
+
+    elif rtype == "weekly":
+        name = (event.reminder_day or "").strip().lower()
+
+        if name not in WEEKDAYS:
+            return None
+
+        target = WEEKDAYS.index(name)
+        days_back = (local_now.weekday() - target) % 7
+
+        candidate = datetime.combine(
+            local_now.date() - timedelta(days=days_back),
+            at,
+        )
+
+        if candidate > local_now:
+            candidate -= timedelta(days=7)
+
+    elif rtype == "monthly":
+        try:
+            wanted_day = int(event.reminder_day)
+        except (TypeError, ValueError):
+            return None
+
+        year, month = local_now.year, local_now.month
+
+        for _ in range(14):
+            day = min(wanted_day, calendar.monthrange(year, month)[1])
+            attempt = datetime.combine(date(year, month, day), at)
+
+            if attempt <= local_now:
+                candidate = attempt
+                break
+
+            month -= 1
+
+            if month == 0:
+                month = 12
+                year -= 1
+
+    elif rtype == "yearly":
+        try:
+            wanted_day = int(event.reminder_day)
+            wanted_month = int(event.reminder_month)
+        except (TypeError, ValueError):
+            return None
+
+        if not 1 <= wanted_month <= 12:
+            return None
+
+        for year in range(local_now.year, local_now.year - 6, -1):
+            day = min(
+                wanted_day,
+                calendar.monthrange(year, wanted_month)[1],
+            )
+            attempt = datetime.combine(
+                date(year, wanted_month, day),
+                at,
+            )
+
+            if attempt <= local_now:
+                candidate = attempt
+                break
+
+    if candidate is None:
+        return None
+
+    # Recurring reminders start from the event's own date.
+    local_start = event.start_time + offset
+
+    if candidate.date() < local_start.date():
+        return None
+
+    return candidate - offset
 
 
 def _process_event_reminders(db, now):
@@ -159,45 +318,39 @@ def _process_event_reminders(db, now):
 
     for event in events:
         scheduled_for = None
+        rtype = event.reminder_type
 
-        if event.reminder_type == "before":
-            if event.reminder_value is None:
+        if rtype in ("before", "after"):
+            if not event.reminder_value:
                 continue
 
-            minutes = event.reminder_value
-
-            if event.reminder_unit == "hours":
-                minutes *= 60
-            elif event.reminder_unit == "days":
-                minutes *= 60 * 24
-
-            scheduled_for = event.start_time - timedelta(
-                minutes=minutes
+            minutes = _to_minutes(
+                event.reminder_value,
+                event.reminder_unit,
             )
 
-        elif event.reminder_type == "after":
-            if event.reminder_value is None:
-                continue
+            if rtype == "before":
+                scheduled_for = event.start_time - timedelta(
+                    minutes=minutes
+                )
+            else:
+                scheduled_for = (
+                    event.end_time or event.start_time
+                ) + timedelta(minutes=minutes)
 
-            minutes = event.reminder_value
-
-            if event.reminder_unit == "hours":
-                minutes *= 60
-            elif event.reminder_unit == "days":
-                minutes *= 60 * 24
-
-            scheduled_for = event.end_time or event.start_time
-            scheduled_for = scheduled_for + timedelta(
-                minutes=minutes
-            )
-
-        elif event.reminder_type in ("specific", "custom"):
+        elif rtype in ("specific", "custom"):
             scheduled_for = event.reminder_datetime
+
+        elif rtype in ("daily", "weekly", "monthly", "yearly"):
+            scheduled_for = _latest_recurring_occurrence(event, now)
 
         if scheduled_for is None:
             continue
 
         if scheduled_for > now:
+            continue
+
+        if now - scheduled_for > CATCH_UP_WINDOW:
             continue
 
         created = _create_notification(

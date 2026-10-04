@@ -145,12 +145,25 @@ function App() {
             try {
                 const response = await apiFetch("/auth/me");
 
-                if (!response.ok) {
+                if (response.status === 401) {
+                    // Session really is invalid or expired.
+                    // (apiFetch already cleared the token.)
                     clearToken();
 
                     if (mounted) {
                         setUser(null);
                     }
+
+                    return;
+                }
+
+                if (!response.ok) {
+                    // Server trouble (e.g. 5xx while Render is waking up):
+                    // keep the saved session instead of logging out.
+                    console.warn(
+                        "Session check failed with status",
+                        response.status
+                    );
 
                     return;
                 }
@@ -162,16 +175,11 @@ function App() {
                     setUser(currentUser);
                 }
             } catch (error) {
+                // Network error / cold start: do NOT log the user out.
                 console.error(
                     "Session validation failed:",
                     error
                 );
-
-                clearToken();
-
-                if (mounted) {
-                    setUser(null);
-                }
             } finally {
                 if (mounted) {
                     setAuthChecking(false);

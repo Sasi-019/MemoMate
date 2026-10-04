@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from fastapi import FastAPI, Depends, HTTPException
@@ -9,7 +10,10 @@ from app.database.database import Base, engine, get_db
 # Models
 from app.models.calendar_event import CalendarEvent
 from app.models.reminder import Reminder
-from app.models.notification import Notification
+from app.models.notification import Notification  # noqa: F401  (registers table)
+from app.models.session import UserSession  # noqa: F401  (registers table)
+from app.models.list import SmartList  # noqa: F401  (registers table)
+from app.models.memory import PersonalMemory  # noqa: F401  (registers table)
 from app.models.user import User
 
 # Schemas
@@ -56,36 +60,33 @@ Base.metadata.create_all(bind=engine)
 # ============================================================
 # CORS
 # ============================================================
-# ============================================================
-# CORS
-# ============================================================
-import os
+# FRONTEND_URL        -> main frontend origin
+# EXTRA_CORS_ORIGINS  -> optional, comma-separated extra origins
+
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
     "http://localhost:5173",
 )
 
+allowed_origins = {
+    FRONTEND_URL.rstrip("/"),
+    "http://localhost:5173",
+    "https://memomate-frontend-vjt2.onrender.com",
+}
+
+for origin in os.getenv("EXTRA_CORS_ORIGINS", "").split(","):
+    origin = origin.strip().rstrip("/")
+
+    if origin:
+        allowed_origins.add(origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL,
-        "https://memomate-frontend-vjt2.onrender.com",
-    ],
+    allow_origins=sorted(allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=[
-#         "https://memomate-frontend-vjt2.onrender.com",
-#         "https://memomate-af77.onrender.com",
-#     ],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 
 
 # ============================================================
@@ -138,6 +139,7 @@ def create_event(
         reminder_time=event.reminder_time,
         reminder_day=event.reminder_day,
         reminder_month=event.reminder_month,
+        tz_offset_minutes=event.tz_offset_minutes,
         recurrence_type=event.recurrence_type,
         recurrence_day=event.recurrence_day,
     )
@@ -205,6 +207,7 @@ def update_event(
     existing_event.reminder_time = event.reminder_time
     existing_event.reminder_day = event.reminder_day
     existing_event.reminder_month = event.reminder_month
+    existing_event.tz_offset_minutes = event.tz_offset_minutes
     existing_event.recurrence_type = event.recurrence_type
     existing_event.recurrence_day = event.recurrence_day
 
@@ -359,59 +362,8 @@ def delete_reminder(
     }
 
 
-# ============================================================
-# NOTIFICATIONS
-# ============================================================
-
-@app.get("/notifications")
-def get_notifications(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    notifications = (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == current_user.id,
-            Notification.is_read == False,
-        )
-        .order_by(
-            Notification.created_at.desc()
-        )
-        .all()
-    )
-
-    return notifications
-
-
-@app.put(
-    "/notifications/{notification_id}/read"
-)
-def mark_notification_read(
-    notification_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    notification = (
-        db.query(Notification)
-        .filter(
-            Notification.id == notification_id,
-            Notification.user_id == current_user.id,
-        )
-        .first()
-    )
-
-    if notification is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Notification not found",
-        )
-
-    notification.is_read = True
-    db.commit()
-
-    return {
-        "message": "Notification marked as read"
-    }
+# NOTE: notification endpoints live in app/api/notifications.py
+# (they were duplicated here before and have been removed).
 
 
 # ============================================================

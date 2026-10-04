@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { apiFetch, localToUtcIso } from "../services/api";
 
 function Reminders() {
     const [reminders, setReminders] = useState([]);
+    const [loadError, setLoadError] = useState("");
 
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -14,14 +16,27 @@ function Reminders() {
 
     const fetchReminders = async () => {
         try {
-            const response = await fetch(
-                "https://memomate-af77.onrender.com/reminders"
-            );
+            setLoadError("");
 
-            const data = await response.json();
-            setReminders(data);
+            const response = await apiFetch("/reminders");
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(
+                    (data && typeof data.detail === "string"
+                        && data.detail) ||
+                        "Could not load reminders."
+                );
+            }
+
+            // Never store a non-array: reminders.map() would crash
+            // the whole page (blank white screen).
+            setReminders(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Error fetching reminders:", error);
+            setLoadError(
+                error.message || "Could not load reminders."
+            );
         }
     };
 
@@ -47,10 +62,19 @@ function Reminders() {
             return;
         }
 
+        // Send UTC so the server's scheduler fires at the right moment
+        // (the datetime-local input gives the user's LOCAL time).
+        const remindAtUtc = localToUtcIso(remindAt);
+
+        if (!remindAtUtc) {
+            alert("Please enter a valid date and time.");
+            return;
+        }
+
         const reminderData = {
             title,
             description: description || null,
-            remind_at: remindAt,
+            remind_at: remindAtUtc,
             recurrence_type: recurrenceType,
             recurrence_day:
                 recurrenceType === "weekly"
@@ -60,15 +84,12 @@ function Reminders() {
         };
 
         try {
-            const url = editingId
-                ? `http://localhost:8000/reminders/${editingId}`
-                : "http://localhost:8000/reminders";
+            const path = editingId
+                ? `/reminders/${editingId}`
+                : "/reminders";
 
-            const response = await fetch(url, {
+            const response = await apiFetch(path, {
                 method: editingId ? "PUT" : "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
                 body: JSON.stringify(reminderData),
             });
 
@@ -80,6 +101,7 @@ function Reminders() {
             resetForm();
         } catch (error) {
             console.error("Error saving reminder:", error);
+            alert(error.message || "Could not save the reminder.");
         }
     };
 
@@ -111,8 +133,8 @@ function Reminders() {
         if (!confirmed) return;
 
         try {
-            const response = await fetch(
-                `http://localhost:8000/reminders/${id}`,
+            const response = await apiFetch(
+                `/reminders/${id}`,
                 {
                     method: "DELETE",
                 }
@@ -122,9 +144,10 @@ function Reminders() {
                 throw new Error("Failed to delete reminder");
             }
 
-            fetchReminders();
+            await fetchReminders();
         } catch (error) {
             console.error("Error deleting reminder:", error);
+            alert(error.message || "Could not delete the reminder.");
         }
     };
 
@@ -141,7 +164,15 @@ function Reminders() {
         }
 
         if (reminder.recurrence_type === "weekly") {
-            return `Every ${reminder.recurrence_day}`;
+            return `Every week`;
+        }
+
+        if (reminder.recurrence_type === "monthly") {
+            return "Every month";
+        }
+
+        if (reminder.recurrence_type === "yearly") {
+            return "Every year";
         }
 
         return "One time";
@@ -178,6 +209,12 @@ function Reminders() {
                     + Add Reminder
                 </button>
             </div>
+
+            {loadError && (
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    ⚠️ {loadError}
+                </div>
+            )}
 
             {/* Reminder list */}
             {reminders.length === 0 ? (

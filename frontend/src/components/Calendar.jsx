@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { apiFetch } from "../services/api";
+import {
+    apiFetch,
+    getTimezoneOffsetMinutes,
+    localToUtcIso,
+    todayLocalDate,
+} from "../services/api";
 import "./Calendar.css";
 
 const REMINDER_OPTIONS = [
@@ -231,16 +236,30 @@ function Calendar() {
                 setReminderDate(
                     `${year}-${month}-${day}`
                 );
+
+                // Also restore the time of day (local) for
+                // "specific" / "custom" reminders.
+                const hours = String(
+                    dateTime.getHours()
+                ).padStart(2, "0");
+
+                const minutes = String(
+                    dateTime.getMinutes()
+                ).padStart(2, "0");
+
+                setReminderTime(
+                    `${hours}:${minutes}`
+                );
             }
         } else {
             setReminderDate(
                 event.startStr.slice(0, 10)
             );
-        }
 
-        setReminderTime(
-            props.reminder_time || "18:00"
-        );
+            setReminderTime(
+                props.reminder_time || "18:00"
+            );
+        }
 
         setReminderDay(
             props.reminder_day || "monday"
@@ -408,8 +427,9 @@ function Calendar() {
                 reminderType === "specific" ||
                 reminderType === "custom"
             ) {
-                reminder_datetime =
-                    buildReminderDateTime();
+                reminder_datetime = localToUtcIso(
+                    buildReminderDateTime()
+                );
             }
 
             if (reminderType === "daily") {
@@ -451,11 +471,20 @@ function Calendar() {
             description:
                 description.trim() || null,
 
-            start_time:
-                `${selectedDate}T${startTime}:00`,
+            // Sent as UTC; the server stores UTC and the scheduler
+            // compares against UTC.
+            start_time: localToUtcIso(
+                `${selectedDate}T${startTime}:00`
+            ),
 
-            end_time:
-                `${selectedDate}T${endTime}:00`,
+            end_time: localToUtcIso(
+                `${selectedDate}T${endTime}:00`
+            ),
+
+            // Lets the server turn "18:00" into the right UTC moment
+            // for daily / weekly / monthly / yearly reminders.
+            tz_offset_minutes:
+                getTimezoneOffsetMinutes(),
 
             reminder_enabled:
                 reminderEnabled ? 1 : 0,
@@ -733,13 +762,8 @@ function Calendar() {
                 <button
                     className="add-event-button"
                     onClick={() => {
-                        const today =
-                            new Date()
-                                .toISOString()
-                                .split("T")[0];
-
                         handleDateClick({
-                            dateStr: today,
+                            dateStr: todayLocalDate(),
                         });
                     }}
                 >
@@ -931,6 +955,30 @@ function Calendar() {
                                                 setReminderType(
                                                     type
                                                 );
+
+                                                // The day dropdown shows 1-31 for
+                                                // monthly/yearly, but the state
+                                                // started as "monday", which made
+                                                // validation fail. Reset it.
+                                                if (
+                                                    (type === "monthly" ||
+                                                        type === "yearly") &&
+                                                    !(Number(reminderDay) >= 1 &&
+                                                        Number(reminderDay) <= 31)
+                                                ) {
+                                                    setReminderDay("1");
+                                                }
+
+                                                if (
+                                                    type === "weekly" &&
+                                                    !WEEKDAYS.some(
+                                                        (weekday) =>
+                                                            weekday.value ===
+                                                            reminderDay
+                                                    )
+                                                ) {
+                                                    setReminderDay("monday");
+                                                }
 
                                                 if (
                                                     type ===
