@@ -1,5 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import relationship
 
 from app.database.database import Base
 
@@ -7,11 +9,7 @@ from app.database.database import Base
 class SmartList(Base):
     __tablename__ = "smart_lists"
 
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
-    )
+    id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(
         Integer,
@@ -29,6 +27,13 @@ class SmartList(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+    # Relationship with list items
+    items = relationship(
+        "SmartListItem",
+        back_populates="smart_list",
+        cascade="all, delete-orphan",
     )
 
 
@@ -57,4 +62,10 @@ class SmartListItem(Base):
         Boolean,
         default=False,
         nullable=False,
+    )
+
+    # Relationship back to the parent list
+    smart_list = relationship(
+        "SmartList",
+        back_populates="items",
     )
