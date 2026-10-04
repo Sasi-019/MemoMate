@@ -1,0 +1,67 @@
+# =========================
+# Python Backend
+# =========================
+
+# Virtual environments
+venv/
+.venv/
+**/venv/
+**/.venv/
+
+# Environment variables / secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+
+# =========================
+# React / Node Frontend
+# =========================
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+**/dist/
+**/build/
+
+# Frontend environment files
+*.local
+
+
+# =========================
+# IDE / Editor
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+# OS
+# =========================
+
+.DS_Store
+Thumbs.db
