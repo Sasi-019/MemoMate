@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import { apiFetch } from "../services/api";
 import "./Calendar.css";
-
-const API_URL = "https://memomate-af77.onrender.com";
 
 const REMINDER_OPTIONS = [
     {
@@ -69,34 +68,19 @@ function Calendar() {
     const [startTime, setStartTime] = useState("10:00");
     const [endTime, setEndTime] = useState("11:00");
 
-    // -------------------------------------------------
-    // Reminder state
-    // -------------------------------------------------
-
     const [reminderEnabled, setReminderEnabled] = useState(false);
-
     const [reminderType, setReminderType] = useState("before");
-
     const [reminderValue, setReminderValue] = useState(30);
-
     const [reminderUnit, setReminderUnit] = useState("minutes");
-
     const [reminderDate, setReminderDate] = useState("");
-
     const [reminderTime, setReminderTime] = useState("18:00");
-
     const [reminderDay, setReminderDay] = useState("monday");
-
     const [reminderMonth, setReminderMonth] = useState(1);
 
     const [editingEventId, setEditingEventId] = useState(null);
 
-    // -------------------------------------------------
-    // Fetch events
-    // -------------------------------------------------
-
     useEffect(() => {
-        fetch(`${API_URL}/events`)
+        apiFetch("/events")
             .then((response) => {
                 if (!response.ok) {
                     throw new Error("Failed to fetch events");
@@ -113,28 +97,20 @@ function Calendar() {
 
                     extendedProps: {
                         description: event.description,
-
                         reminder_enabled:
                             event.reminder_enabled,
-
                         reminder_type:
                             event.reminder_type,
-
                         reminder_value:
                             event.reminder_value,
-
                         reminder_unit:
                             event.reminder_unit,
-
                         reminder_datetime:
                             event.reminder_datetime,
-
                         reminder_time:
                             event.reminder_time,
-
                         reminder_day:
                             event.reminder_day,
-
                         reminder_month:
                             event.reminder_month,
                     },
@@ -150,51 +126,34 @@ function Calendar() {
             });
     }, []);
 
-    // -------------------------------------------------
-    // Reset form
-    // -------------------------------------------------
-
     const resetForm = () => {
         setTitle("");
         setDescription("");
-
         setStartTime("10:00");
         setEndTime("11:00");
-
         setReminderEnabled(false);
         setReminderType("before");
         setReminderValue(30);
         setReminderUnit("minutes");
-
         setReminderDate("");
         setReminderTime("18:00");
         setReminderDay("monday");
         setReminderMonth(1);
-
         setSelectedDate(null);
         setEditingEventId(null);
     };
 
-    // -------------------------------------------------
-    // Open create modal
-    // -------------------------------------------------
-
     const handleDateClick = (info) => {
         setEditingEventId(null);
-
         setSelectedDate(info.dateStr);
-
         setTitle("");
         setDescription("");
-
         setStartTime("10:00");
         setEndTime("11:00");
-
         setReminderEnabled(false);
         setReminderType("before");
         setReminderValue(30);
         setReminderUnit("minutes");
-
         setReminderDate(`${info.dateStr}`);
         setReminderTime("18:00");
         setReminderDay("monday");
@@ -202,10 +161,6 @@ function Calendar() {
             Number(info.dateStr.slice(5, 7))
         );
     };
-
-    // -------------------------------------------------
-    // Open edit modal
-    // -------------------------------------------------
 
     const handleEventClick = (info) => {
         const event = info.event;
@@ -299,10 +254,6 @@ function Calendar() {
         );
     };
 
-    // -------------------------------------------------
-    // Create reminder datetime
-    // -------------------------------------------------
-
     const buildReminderDateTime = () => {
         if (
             !reminderDate ||
@@ -313,10 +264,6 @@ function Calendar() {
 
         return `${reminderDate}T${reminderTime}:00`;
     };
-
-    // -------------------------------------------------
-    // Reminder validation
-    // -------------------------------------------------
 
     const validateReminder = () => {
         if (!reminderEnabled) {
@@ -416,10 +363,6 @@ function Calendar() {
         return true;
     };
 
-    // -------------------------------------------------
-    // Save event
-    // -------------------------------------------------
-
     const handleSaveEvent = () => {
         if (!title.trim()) {
             alert(
@@ -440,10 +383,6 @@ function Calendar() {
         if (!validateReminder()) {
             return;
         }
-
-        // ---------------------------------------------
-        // Build reminder fields
-        // ---------------------------------------------
 
         let reminder_datetime = null;
         let reminder_time = null;
@@ -473,16 +412,12 @@ function Calendar() {
                     buildReminderDateTime();
             }
 
-            if (
-                reminderType === "daily"
-            ) {
+            if (reminderType === "daily") {
                 reminder_time =
                     reminderTime;
             }
 
-            if (
-                reminderType === "weekly"
-            ) {
+            if (reminderType === "weekly") {
                 reminder_day =
                     reminderDay;
 
@@ -490,9 +425,7 @@ function Calendar() {
                     reminderTime;
             }
 
-            if (
-                reminderType === "monthly"
-            ) {
+            if (reminderType === "monthly") {
                 reminder_day =
                     String(reminderDay);
 
@@ -500,9 +433,7 @@ function Calendar() {
                     reminderTime;
             }
 
-            if (
-                reminderType === "yearly"
-            ) {
+            if (reminderType === "yearly") {
                 reminder_month =
                     Number(reminderMonth);
 
@@ -525,10 +456,6 @@ function Calendar() {
 
             end_time:
                 `${selectedDate}T${endTime}:00`,
-
-            // -----------------------------------------
-            // Reminder
-            // -----------------------------------------
 
             reminder_enabled:
                 reminderEnabled ? 1 : 0,
@@ -556,34 +483,23 @@ function Calendar() {
             reminder_month:
                 reminder_month,
 
-            // -----------------------------------------
-            // Event recurrence
-            // -----------------------------------------
-
             recurrence_type: "none",
 
             recurrence_day: null,
         };
 
-        const url = editingEventId
-            ? `${API_URL}/events/${editingEventId}`
-            : `${API_URL}/events`;
-
         const method = editingEventId
             ? "PUT"
             : "POST";
 
-        fetch(url, {
+        const endpoint = editingEventId
+            ? `/events/${editingEventId}`
+            : "/events";
+
+        apiFetch(endpoint, {
             method,
 
-            headers: {
-                "Content-Type":
-                    "application/json",
-            },
-
-            body: JSON.stringify(
-                eventData
-            ),
+            body: JSON.stringify(eventData),
         })
             .then((response) => {
                 if (!response.ok) {
@@ -670,14 +586,11 @@ function Calendar() {
                 );
 
                 alert(
-                    "Could not save the event."
+                    error?.message ||
+                        "Could not save the event."
                 );
             });
     };
-
-    // -------------------------------------------------
-    // Delete event
-    // -------------------------------------------------
 
     const handleDeleteEvent = () => {
         if (!editingEventId) {
@@ -693,8 +606,8 @@ function Calendar() {
             return;
         }
 
-        fetch(
-            `${API_URL}/events/${editingEventId}`,
+        apiFetch(
+            `/events/${editingEventId}`,
             {
                 method: "DELETE",
             }
@@ -731,14 +644,11 @@ function Calendar() {
                 );
 
                 alert(
-                    "Could not delete the event."
+                    error?.message ||
+                        "Could not delete the event."
                 );
             });
     };
-
-    // -------------------------------------------------
-    // Reminder preview
-    // -------------------------------------------------
 
     const getReminderPreview = () => {
         if (!reminderEnabled) {
@@ -753,9 +663,7 @@ function Calendar() {
             return `You'll be reminded ${reminderValue} ${reminderUnit} after the event.`;
         }
 
-        if (
-            reminderType === "specific"
-        ) {
+        if (reminderType === "specific") {
             if (
                 !reminderDate ||
                 !reminderTime
@@ -810,17 +718,9 @@ function Calendar() {
         return "";
     };
 
-    // -------------------------------------------------
-    // JSX
-    // -------------------------------------------------
-
     return (
         <div className="calendar-page">
-
-            {/* Header */}
-
             <div className="calendar-header">
-
                 <div>
                     <h2>Calendar</h2>
 
@@ -845,13 +745,9 @@ function Calendar() {
                 >
                     + Add Event
                 </button>
-
             </div>
 
-            {/* Calendar */}
-
             <div className="calendar-card">
-
                 <FullCalendar
                     plugins={[
                         dayGridPlugin,
@@ -859,18 +755,11 @@ function Calendar() {
                     ]}
                     initialView="dayGridMonth"
                     events={events}
-                    dateClick={
-                        handleDateClick
-                    }
-                    eventClick={
-                        handleEventClick
-                    }
+                    dateClick={handleDateClick}
+                    eventClick={handleEventClick}
                     height="auto"
                 />
-
             </div>
-
-            {/* Modal */}
 
             {selectedDate && (
                 <div
@@ -884,15 +773,9 @@ function Calendar() {
                         }
                     }}
                 >
-
                     <div className="event-modal">
-
-                        {/* Modal Header */}
-
                         <div className="modal-header">
-
                             <div>
-
                                 <h3>
                                     {editingEventId
                                         ? "Edit Event"
@@ -904,24 +787,17 @@ function Calendar() {
                                         ? "Update your event details."
                                         : "Add something you want to remember."}
                                 </p>
-
                             </div>
 
                             <button
                                 className="close-button"
-                                onClick={
-                                    resetForm
-                                }
+                                onClick={resetForm}
                             >
                                 ×
                             </button>
-
                         </div>
 
-                        {/* Title */}
-
                         <div className="form-group">
-
                             <label>
                                 Event title
                             </label>
@@ -932,122 +808,81 @@ function Calendar() {
                                 value={title}
                                 onChange={(event) =>
                                     setTitle(
-                                        event.target
-                                            .value
+                                        event.target.value
                                     )
                                 }
                             />
-
                         </div>
 
-                        {/* Description */}
-
                         <div className="form-group">
-
                             <label>
                                 Description
                             </label>
 
                             <textarea
                                 placeholder="Add some details..."
-                                value={
-                                    description
-                                }
+                                value={description}
                                 onChange={(event) =>
                                     setDescription(
-                                        event.target
-                                            .value
+                                        event.target.value
                                     )
                                 }
                             />
-
                         </div>
 
-                        {/* Date */}
-
                         <div className="form-group">
-
                             <label>
                                 Date
                             </label>
 
                             <input
                                 type="date"
-                                value={
-                                    selectedDate
-                                }
+                                value={selectedDate}
                                 onChange={(event) =>
                                     setSelectedDate(
-                                        event.target
-                                            .value
+                                        event.target.value
                                     )
                                 }
                             />
-
                         </div>
 
-                        {/* Time */}
-
                         <div className="time-row">
-
                             <div className="form-group">
-
                                 <label>
                                     Start time
                                 </label>
 
                                 <input
                                     type="time"
-                                    value={
-                                        startTime
-                                    }
-                                    onChange={(
-                                        event
-                                    ) =>
+                                    value={startTime}
+                                    onChange={(event) =>
                                         setStartTime(
-                                            event
-                                                .target
-                                                .value
+                                            event.target.value
                                         )
                                     }
                                 />
-
                             </div>
 
                             <div className="form-group">
-
                                 <label>
                                     End time
                                 </label>
 
                                 <input
                                     type="time"
-                                    value={
-                                        endTime
-                                    }
-                                    onChange={(
-                                        event
-                                    ) =>
+                                    value={endTime}
+                                    onChange={(event) =>
                                         setEndTime(
-                                            event
-                                                .target
-                                                .value
+                                            event.target.value
                                         )
                                     }
                                 />
-
                             </div>
-
                         </div>
 
-                        {/* Reminder */}
-
                         <div className="reminder-section">
-
                             <div className="reminder-header">
-
                                 <div>
-
                                     <label>
                                         Reminder
                                     </label>
@@ -1056,23 +891,17 @@ function Calendar() {
                                         Choose when MemoMate
                                         should remind you.
                                     </p>
-
                                 </div>
 
                                 <label className="reminder-toggle">
-
                                     <input
                                         type="checkbox"
                                         checked={
                                             reminderEnabled
                                         }
-                                        onChange={(
-                                            event
-                                        ) =>
+                                        onChange={(event) =>
                                             setReminderEnabled(
-                                                event
-                                                    .target
-                                                    .checked
+                                                event.target.checked
                                             )
                                         }
                                     />
@@ -1080,18 +909,12 @@ function Calendar() {
                                     <span>
                                         Remind me
                                     </span>
-
                                 </label>
-
                             </div>
 
                             {reminderEnabled && (
                                 <>
-
-                                    {/* Reminder type */}
-
                                     <div className="form-group">
-
                                         <label>
                                             When should I remind you?
                                         </label>
@@ -1100,12 +923,9 @@ function Calendar() {
                                             value={
                                                 reminderType
                                             }
-                                            onChange={(
-                                                event
-                                            ) => {
+                                            onChange={(event) => {
                                                 const type =
-                                                    event
-                                                        .target
+                                                    event.target
                                                         .value;
 
                                                 setReminderType(
@@ -1131,7 +951,6 @@ function Calendar() {
                                                 }
                                             }}
                                         >
-
                                             {REMINDER_OPTIONS.map(
                                                 (option) => (
                                                     <option
@@ -1148,12 +967,8 @@ function Calendar() {
                                                     </option>
                                                 )
                                             )}
-
                                         </select>
-
                                     </div>
-
-                                    {/* Before / After */}
 
                                     {(
                                         reminderType ===
@@ -1161,11 +976,8 @@ function Calendar() {
                                         reminderType ===
                                             "after"
                                     ) && (
-
                                         <div className="reminder-value-row">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     How much?
                                                 </label>
@@ -1186,11 +998,9 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Unit
                                                 </label>
@@ -1209,7 +1019,6 @@ function Calendar() {
                                                         )
                                                     }
                                                 >
-
                                                     <option value="minutes">
                                                         Minutes
                                                     </option>
@@ -1221,23 +1030,15 @@ function Calendar() {
                                                     <option value="days">
                                                         Days
                                                     </option>
-
                                                 </select>
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Specific */}
-
                                     {reminderType ===
                                         "specific" && (
-
                                         <div className="reminder-custom-grid">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     Date
                                                 </label>
@@ -1257,11 +1058,9 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Time
                                                 </label>
@@ -1281,19 +1080,13 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Daily */}
-
                                     {reminderType ===
                                         "daily" && (
-
                                         <div className="form-group">
-
                                             <label>
                                                 Every day at
                                             </label>
@@ -1313,19 +1106,13 @@ function Calendar() {
                                                     )
                                                 }
                                             />
-
                                         </div>
                                     )}
 
-                                    {/* Weekly */}
-
                                     {reminderType ===
                                         "weekly" && (
-
                                         <div className="reminder-value-row">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     Day
                                                 </label>
@@ -1344,11 +1131,8 @@ function Calendar() {
                                                         )
                                                     }
                                                 >
-
                                                     {WEEKDAYS.map(
-                                                        (
-                                                            day
-                                                        ) => (
+                                                        (day) => (
                                                             <option
                                                                 key={
                                                                     day.value
@@ -1363,13 +1147,10 @@ function Calendar() {
                                                             </option>
                                                         )
                                                     )}
-
                                                 </select>
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Time
                                                 </label>
@@ -1389,21 +1170,14 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Monthly */}
-
                                     {reminderType ===
                                         "monthly" && (
-
                                         <div className="reminder-value-row">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     Day of month
                                                 </label>
@@ -1422,15 +1196,11 @@ function Calendar() {
                                                         )
                                                     }
                                                 >
-
                                                     {Array.from(
                                                         {
                                                             length: 31,
                                                         },
-                                                        (
-                                                            _,
-                                                            index
-                                                        ) => (
+                                                        (_, index) => (
                                                             <option
                                                                 key={
                                                                     index +
@@ -1450,13 +1220,10 @@ function Calendar() {
                                                             </option>
                                                         )
                                                     )}
-
                                                 </select>
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Time
                                                 </label>
@@ -1476,21 +1243,14 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Yearly */}
-
                                     {reminderType ===
                                         "yearly" && (
-
                                         <div className="reminder-custom-grid">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     Month
                                                 </label>
@@ -1511,7 +1271,6 @@ function Calendar() {
                                                         )
                                                     }
                                                 >
-
                                                     {[
                                                         "January",
                                                         "February",
@@ -1546,13 +1305,10 @@ function Calendar() {
                                                             </option>
                                                         )
                                                     )}
-
                                                 </select>
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Day
                                                 </label>
@@ -1571,15 +1327,11 @@ function Calendar() {
                                                         )
                                                     }
                                                 >
-
                                                     {Array.from(
                                                         {
                                                             length: 31,
                                                         },
-                                                        (
-                                                            _,
-                                                            index
-                                                        ) => (
+                                                        (_, index) => (
                                                             <option
                                                                 key={
                                                                     index +
@@ -1595,13 +1347,10 @@ function Calendar() {
                                                             </option>
                                                         )
                                                     )}
-
                                                 </select>
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Time
                                                 </label>
@@ -1621,21 +1370,14 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Custom */}
-
                                     {reminderType ===
                                         "custom" && (
-
                                         <div className="reminder-custom-grid">
-
                                             <div className="form-group">
-
                                                 <label>
                                                     Date
                                                 </label>
@@ -1655,11 +1397,9 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
 
                                             <div className="form-group">
-
                                                 <label>
                                                     Time
                                                 </label>
@@ -1679,16 +1419,11 @@ function Calendar() {
                                                         )
                                                     }
                                                 />
-
                                             </div>
-
                                         </div>
                                     )}
 
-                                    {/* Preview */}
-
                                     <div className="reminder-preview">
-
                                         <strong>
                                             Reminder preview
                                         </strong>
@@ -1696,18 +1431,12 @@ function Calendar() {
                                         <p>
                                             {getReminderPreview()}
                                         </p>
-
                                     </div>
-
                                 </>
                             )}
-
                         </div>
 
-                        {/* Actions */}
-
                         <div className="modal-actions">
-
                             {editingEventId && (
                                 <button
                                     className="delete-button"
@@ -1720,12 +1449,9 @@ function Calendar() {
                             )}
 
                             <div className="right-actions">
-
                                 <button
                                     className="cancel-button"
-                                    onClick={
-                                        resetForm
-                                    }
+                                    onClick={resetForm}
                                 >
                                     Cancel
                                 </button>
@@ -1740,24 +1466,14 @@ function Calendar() {
                                         ? "Save Changes"
                                         : "Add Event"}
                                 </button>
-
                             </div>
-
                         </div>
-
                     </div>
-
                 </div>
             )}
-
         </div>
     );
 }
-
-
-// -----------------------------------------------------
-// Helper: ordinal numbers
-// -----------------------------------------------------
 
 function getOrdinal(number) {
     if (

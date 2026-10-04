@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-const API_URL = "https://memomate-af77.onrender.com";
+import { apiFetch } from "../services/api";
 
 function Lists() {
     const [lists, setLists] = useState([]);
@@ -22,20 +21,23 @@ function Lists() {
             setLoading(true);
             setError("");
 
-            const response = await fetch(`${API_URL}/lists`);
-
-            if (!response.ok) {
-                throw new Error("Could not load lists.");
-            }
+            const response = await apiFetch("/lists");
 
             const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.detail || "Could not load lists."
+                );
+            }
 
             setLists(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error("Lists error:", err);
 
             setError(
-                "Could not connect to MemoMate lists."
+                err.message ||
+                    "Could not connect to MemoMate lists."
             );
         } finally {
             setLoading(false);
@@ -58,8 +60,10 @@ function Lists() {
         }
 
         try {
-            const response = await fetch(
-                `${API_URL}/lists?name=${encodeURIComponent(name)}`,
+            setError("");
+
+            const response = await apiFetch(
+                `/lists?name=${encodeURIComponent(name)}`,
                 {
                     method: "POST",
                 }
@@ -69,7 +73,8 @@ function Lists() {
 
             if (!response.ok) {
                 throw new Error(
-                    result.detail || "Could not create list."
+                    result.detail ||
+                        "Could not create list."
                 );
             }
 
@@ -78,10 +83,11 @@ function Lists() {
 
             await loadLists();
         } catch (err) {
-            console.error(err);
+            console.error("Create list error:", err);
 
             setError(
-                err.message || "Could not create list."
+                err.message ||
+                    "Could not create list."
             );
         }
     };
@@ -101,9 +107,10 @@ function Lists() {
 
         try {
             setAddingItem(listId);
+            setError("");
 
-            const response = await fetch(
-                `${API_URL}/lists/${listId}/items?text=${encodeURIComponent(
+            const response = await apiFetch(
+                `/lists/${listId}/items?text=${encodeURIComponent(
                     text
                 )}`,
                 {
@@ -115,7 +122,8 @@ function Lists() {
 
             if (!response.ok) {
                 throw new Error(
-                    result.detail || "Could not add item."
+                    result.detail ||
+                        "Could not add item."
                 );
             }
 
@@ -126,10 +134,11 @@ function Lists() {
 
             await loadLists();
         } catch (err) {
-            console.error(err);
+            console.error("Add item error:", err);
 
             setError(
-                err.message || "Could not add item."
+                err.message ||
+                    "Could not add item."
             );
         } finally {
             setAddingItem(null);
@@ -142,8 +151,10 @@ function Lists() {
 
     const completeItem = async (itemId) => {
         try {
-            const response = await fetch(
-                `${API_URL}/lists/items/${itemId}/complete`,
+            setError("");
+
+            const response = await apiFetch(
+                `/lists/items/${itemId}/complete`,
                 {
                     method: "PUT",
                 }
@@ -160,7 +171,10 @@ function Lists() {
 
             await loadLists();
         } catch (err) {
-            console.error(err);
+            console.error(
+                "Complete item error:",
+                err
+            );
 
             setError(
                 err.message ||
@@ -175,8 +189,10 @@ function Lists() {
 
     const deleteItem = async (itemId) => {
         try {
-            const response = await fetch(
-                `${API_URL}/lists/items/${itemId}`,
+            setError("");
+
+            const response = await apiFetch(
+                `/lists/items/${itemId}`,
                 {
                     method: "DELETE",
                 }
@@ -193,7 +209,10 @@ function Lists() {
 
             await loadLists();
         } catch (err) {
-            console.error(err);
+            console.error(
+                "Delete item error:",
+                err
+            );
 
             setError(
                 err.message ||
@@ -248,9 +267,7 @@ function Lists() {
     return (
         <div className="space-y-6">
 
-            {/* --------------------------------------------------
-                Header
-            -------------------------------------------------- */}
+            {/* Header */}
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
@@ -283,9 +300,7 @@ function Lists() {
                 </button>
             </div>
 
-            {/* --------------------------------------------------
-                Error
-            -------------------------------------------------- */}
+            {/* Error */}
 
             {error && (
                 <div className="flex items-start justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -303,9 +318,7 @@ function Lists() {
                 </div>
             )}
 
-            {/* --------------------------------------------------
-                Stats
-            -------------------------------------------------- */}
+            {/* Stats */}
 
             <div className="grid gap-4 sm:grid-cols-3">
 
@@ -340,9 +353,7 @@ function Lists() {
                 </div>
             </div>
 
-            {/* --------------------------------------------------
-                Empty state
-            -------------------------------------------------- */}
+            {/* Empty state */}
 
             {lists.length === 0 && (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
@@ -374,9 +385,7 @@ function Lists() {
                 </div>
             )}
 
-            {/* --------------------------------------------------
-                Lists
-            -------------------------------------------------- */}
+            {/* Lists */}
 
             {lists.length > 0 && (
                 <div className="grid gap-5 lg:grid-cols-2">
@@ -399,6 +408,7 @@ function Lists() {
                             >
 
                                 {/* List header */}
+
                                 <div className="border-b border-slate-100 p-5">
 
                                     <div className="flex items-start justify-between gap-4">
@@ -432,6 +442,7 @@ function Lists() {
                                 </div>
 
                                 {/* Items */}
+
                                 <div className="p-4">
 
                                     {items.length === 0 ? (
@@ -507,6 +518,7 @@ function Lists() {
                                     )}
 
                                     {/* Add item */}
+
                                     <div className="mt-4 flex gap-2">
 
                                         <input
@@ -572,9 +584,7 @@ function Lists() {
                 </div>
             )}
 
-            {/* --------------------------------------------------
-                Create List Modal
-            -------------------------------------------------- */}
+            {/* Create List Modal */}
 
             {showCreate && (
                 <div
