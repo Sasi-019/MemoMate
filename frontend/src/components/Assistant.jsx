@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-
-const API_URL =
-    import.meta.env.VITE_API_URL ||
-    "https://memomate-af77.onrender.com";
-
-const getToken = () =>
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("auth_token") ||
-    "";
+import { apiFetch } from "../services/api";
 
 const INITIAL_MESSAGE = {
     role: "assistant",
@@ -23,30 +14,24 @@ const QUICK_PROMPTS = [
 ];
 
 function Assistant() {
-    const [messages, setMessages] = useState([
-        INITIAL_MESSAGE,
-    ]);
-
+    const [messages, setMessages] = useState([INITIAL_MESSAGE]);
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
 
     const [isRecording, setIsRecording] = useState(false);
-    const [voiceSupported, setVoiceSupported] =
-        useState(false);
+    const [voiceSupported, setVoiceSupported] = useState(false);
     const [voiceError, setVoiceError] = useState("");
-    const [transcribing, setTranscribing] =
-        useState(false);
+    const [transcribing, setTranscribing] = useState(false);
 
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
 
     useEffect(() => {
-        const supported =
+        setVoiceSupported(
             !!navigator.mediaDevices &&
             !!navigator.mediaDevices.getUserMedia &&
-            !!window.MediaRecorder;
-
-        setVoiceSupported(supported);
+            !!window.MediaRecorder
+        );
     }, []);
 
     const sendMessage = async (messageOverride = null) => {
@@ -58,11 +43,12 @@ function Assistant() {
             return;
         }
 
-        const previousConversation =
-            messages.map((message) => ({
+        const previousConversation = messages.map(
+            (message) => ({
                 role: message.role,
                 content: message.content,
-            }));
+            })
+        );
 
         setMessages((previous) => [
             ...previous,
@@ -77,24 +63,10 @@ function Assistant() {
         setVoiceError("");
 
         try {
-            const token = getToken();
-
-            const response = await fetch(
-                `${API_URL}/assistant/chat`,
+            const response = await apiFetch(
+                "/assistant/chat",
                 {
                     method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-
-                        ...(token
-                            ? {
-                                  Authorization: `Bearer ${token}`,
-                              }
-                            : {}),
-                    },
-
                     body: JSON.stringify({
                         message: trimmed,
                         conversation:
@@ -103,36 +75,26 @@ function Assistant() {
                 }
             );
 
-            let result = null;
-
-            try {
-                result = await response.json();
-            } catch {
-                result = null;
-            }
+            const result = await response
+                .json()
+                .catch(() => ({}));
 
             if (!response.ok) {
-                const detail =
-                    typeof result?.detail ===
-                    "string"
-                        ? result.detail
-                        : "Assistant request failed.";
-
-                throw new Error(detail);
+                throw new Error(
+                    result.detail ||
+                        "Assistant request failed."
+                );
             }
 
             setMessages((previous) => [
                 ...previous,
                 {
                     role: "assistant",
-
                     content:
-                        result?.response ||
+                        result.response ||
                         "I understood your request.",
-
-                    action: result?.action,
-
-                    data: result?.data,
+                    action: result.action,
+                    data: result.data,
                 },
             ]);
         } catch (error) {
@@ -145,11 +107,9 @@ function Assistant() {
                 ...previous,
                 {
                     role: "assistant",
-
                     content:
                         error.message ||
                         "Sorry, I couldn't connect to MemoMate AI right now.",
-
                     error: true,
                 },
             ]);
@@ -165,17 +125,14 @@ function Assistant() {
             setVoiceError(
                 "Voice recording is not supported in this browser."
             );
-
             return;
         }
 
         try {
             const stream =
-                await navigator.mediaDevices.getUserMedia(
-                    {
-                        audio: true,
-                    }
-                );
+                await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                });
 
             const mediaRecorder =
                 new MediaRecorder(stream);
@@ -215,7 +172,6 @@ function Assistant() {
                 mediaRecorder;
 
             mediaRecorder.start();
-
             setIsRecording(true);
         } catch (error) {
             console.error(
@@ -257,32 +213,22 @@ function Assistant() {
                 "memomate-voice.webm"
             );
 
-            const token = getToken();
-
-            const response = await fetch(
-                `${API_URL}/voice/transcribe`,
+            const response = await apiFetch(
+                "/voice/transcribe",
                 {
                     method: "POST",
-
-                    headers: token
-                        ? {
-                              Authorization: `Bearer ${token}`,
-                          }
-                        : {},
-
                     body: formData,
                 }
             );
 
-            const result =
-                await response.json();
+            const result = await response
+                .json()
+                .catch(() => ({}));
 
             if (!response.ok) {
                 throw new Error(
-                    typeof result?.detail ===
-                        "string"
-                        ? result.detail
-                        : "Voice transcription failed."
+                    result.detail ||
+                        "Voice transcription failed."
                 );
             }
 
@@ -296,7 +242,6 @@ function Assistant() {
             }
 
             setInput(transcript);
-
             await sendMessage(transcript);
         } catch (error) {
             console.error(
@@ -388,7 +333,10 @@ function Assistant() {
                         <div className="mx-auto max-w-4xl space-y-5">
 
                             {messages.map(
-                                (message, index) => {
+                                (
+                                    message,
+                                    index
+                                ) => {
                                     const isUser =
                                         message.role ===
                                         "user";
@@ -436,17 +384,13 @@ function Assistant() {
                                                                   : "rounded-tl-md bg-slate-100 text-slate-800"
                                                         }`}
                                                     >
-                                                        {
-                                                            message.content
-                                                        }
+                                                        {message.content}
                                                     </div>
 
                                                     {actionLabel && (
                                                         <div className="mt-2 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
                                                             ✓{" "}
-                                                            {
-                                                                actionLabel
-                                                            }
+                                                            {actionLabel}
                                                         </div>
                                                     )}
                                                 </div>
@@ -585,8 +529,7 @@ function Assistant() {
                                     value={input}
                                     onChange={(event) =>
                                         setInput(
-                                            event.target
-                                                .value
+                                            event.target.value
                                         )
                                     }
                                     onKeyDown={
@@ -623,8 +566,7 @@ function Assistant() {
                                 </span>
 
                                 <span>
-                                    🎤 Backend Whisper
-                                    voice
+                                    🎤 Backend Whisper voice
                                 </span>
                             </div>
                         </div>
