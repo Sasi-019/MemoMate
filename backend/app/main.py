@@ -60,8 +60,8 @@ Base.metadata.create_all(bind=engine)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        "https://memomate-frontend-vjt2.onrender.com",
+        "https://memomate-af77.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
